@@ -893,6 +893,35 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class KlassMetaDataDump : public DCmdWithParser {
+protected:
+  DCmdArgument<bool> _print_class;
+  DCmdArgument<bool> _print_constant;
+  DCmdArgument<bool> _print_cache;
+  DCmdArgument<bool> _print_methods;
+  DCmdArgument<bool> _print_compiled_methods;
+  DCmdArgument<char*> _class_name;
+public:
+  KlassMetaDataDump(outputStream* output, bool heap);
+  static const char* name() {
+    return "VM.klass_metadata_dump";
+  }
+  static const char* description() {
+    return "Dump the metadata of classes of a given name.";
+  }
+  static const char* impact() {
+      return "Medium: Depends on Java content.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+
 #if INCLUDE_JVMTI
 class DebugOnCmdStartDCmd : public DCmdWithParser {
 public:

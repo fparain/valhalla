@@ -656,8 +656,26 @@ void ConstantPoolCacheEntry::print(outputStream* st, int index) const {
   st->print("%3d  (" PTR_FORMAT ")  ", index, (intptr_t)this);
   st->print_cr("[%02x|%02x|%5d]", bytecode_2(), bytecode_1(),
                constant_pool_index());
-  st->print_cr("                 [   " PTR_FORMAT "]", (intptr_t)_f1);
-  st->print_cr("                 [   " PTR_FORMAT "]", (intptr_t)_f2);
+  st->print("                 [   " PTR_FORMAT "]", (intptr_t)_f1);
+  if (is_field_entry()) {
+    st->print_cr(" Holder: %s", is_field_entry() ?  f1_as_klass()->name()->as_C_string() : "not set");
+  } else {
+    if (_f1 != NULL && _f1->is_method()) {
+      st->print_cr(" Method: %s", f1_as_method()->name_and_sig_as_C_string());
+    } else {
+      st->print_cr("");
+    }
+  }
+  st->print("                 [   " PTR_FORMAT "]", (intptr_t)_f2);
+  if (is_field_entry()) {
+    st->print_cr("");
+  } else {
+    if (_f2 != 0 && is_vfinal()) {
+      st->print_cr(" Method: %s", f2_as_vfinal_method()->name_and_sig_as_C_string());
+    } else {
+      st->print_cr("");
+    }
+  }
   st->print_cr("                 [   " PTR_FORMAT "]", (intptr_t)_flags);
   st->print_cr("                 -------------");
 }

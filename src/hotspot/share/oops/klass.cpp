@@ -31,6 +31,7 @@
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmSymbols.hpp"
+#include "code/compiledMethod.hpp"
 #include "gc/shared/collectedHeap.inline.hpp"
 #include "logging/log.hpp"
 #include "memory/heapShared.hpp"
@@ -49,6 +50,7 @@
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/handles.inline.hpp"
+#include "services/diagnosticCommand.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/stack.inline.hpp"
@@ -1000,4 +1002,105 @@ const char* Klass::class_in_module_of_loader(bool use_are, bool include_parent_l
                parent_loader_name_and_id);
 
   return class_description;
+}
+
+void Klass::print_meta_data(outputStream* st, bool print_all, bool print_class, bool print_constant,
+                               bool print_cache, bool print_methods, bool print_compiled_methods) const {
+  if (!this->is_instance_klass()) {
+    return; // Currently the method supports only InstanceKlass;
+  }
+  const InstanceKlass* ik = InstanceKlass::cast(this);
+  if (print_all || print_class) {
+    ik->print_on(st);
+  }
+  if (print_all || print_constant) {
+    ik->constants()->print_on(st);
+  }
+  if (print_all || print_cache) {
+    ik->constants()->cache()->print_on(st);
+  }
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    if (print_all || print_methods) {
+      m->print_on(st);
+      m->constMethod()->print_on(st);
+    }
+    if (m->code() != NULL) {
+      if (print_all || print_compiled_methods) {
+        m->code()->print_on(st);
+      }
+    }
+  }
+}
+
+
+class KlassDCmdClosure : public LockedClassesDo {
+  outputStream* _st;
+  char* _class_name;
+  bool _print_all;
+  bool _print_class;
+  bool _print_constant;
+  bool _print_cache;
+  bool _print_methods;
+  bool _print_compiled_methods;
+public:
+  KlassDCmdClosure(outputStream* st, char* class_name, bool print_all, bool print_class, bool print_constant,
+                   bool print_cache, bool print_methods, bool print_compiled_methods ) :
+    _st(st),
+    _class_name(class_name),
+    _print_all(print_all),
+    _print_class(print_class),
+    _print_constant(print_constant),
+    _print_cache(print_cache),
+    _print_methods(print_methods),
+    _print_compiled_methods(print_compiled_methods) {}
+
+  void do_klass(Klass* k) {
+    if (k->is_instance_klass() && k->name()->equals(_class_name)) {
+      k->print_meta_data(_st, _print_all, _print_class, _print_constant, _print_cache, _print_methods,
+                         _print_compiled_methods);
+    }
+  }
+};
+
+KlassMetaDataDump::KlassMetaDataDump(outputStream* output, bool heap) :
+                                 DCmdWithParser(output, heap),
+  _print_class("-class", "Print only Klass content", "BOOLEAN", false, "false"),
+  _print_constant("-constant", "Print only constant pool", "BOOLEAN", false, "false"),
+  _print_cache("-cache", "Print only constant pool cache", "BOOLEAN", false, "false"),
+  _print_methods("-methods", "Print only methods", "BOOLEAN", false, "false"),
+  _print_compiled_methods("-compiledmethods", "Print only compiled methods", "BOOLEAN", false, "false"),
+  _class_name("class name", "Name of class(es) whose meta-data will be dumped",
+           "STRING", true) {
+  ResourceMark rm;
+  _dcmdparser.add_dcmd_option(&_print_class);
+  _dcmdparser.add_dcmd_option(&_print_constant);
+  _dcmdparser.add_dcmd_option(&_print_cache);
+  _dcmdparser.add_dcmd_option(&_print_methods);
+  _dcmdparser.add_dcmd_option(&_print_compiled_methods);
+  _dcmdparser.add_dcmd_argument(&_class_name);
+}
+
+int KlassMetaDataDump::num_arguments() {
+  ResourceMark rm;
+  KlassMetaDataDump* dcmd = new KlassMetaDataDump(NULL, false);
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
+}
+// Utility to dump meta-data of classes
+void KlassMetaDataDump::execute(DCmdSource source, TRAPS) {
+  bool print_all = true;
+  if (_print_class.value() || _print_constant.value() || _print_cache.value() || _print_methods.value()
+      || _print_compiled_methods.value()) {
+        print_all = false;
+      }
+  ResourceMark rm;
+  KlassDCmdClosure locked_dump_class(output(), _class_name.value(), print_all, _print_class.value(),
+                                     _print_constant.value(), _print_cache.value(), _print_methods.value(),
+                                     _print_compiled_methods.value());
+  ClassLoaderDataGraph::classes_do(&locked_dump_class);
 }

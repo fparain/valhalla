@@ -727,6 +727,9 @@ protected:
 
   // Printing
   virtual void print_on(outputStream* st) const;
+  virtual void print_meta_data(outputStream* st, bool print_all = true, bool print_class = false,
+                               bool print_constant = false, bool print_cache= false,
+                               bool print_methods = false, bool print_compiled_methods = false) const;
 
   virtual void oop_print_value_on(oop obj, outputStream* st);
   virtual void oop_print_on      (oop obj, outputStream* st);
