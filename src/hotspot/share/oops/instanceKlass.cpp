@@ -3625,12 +3625,43 @@ void InstanceKlass::print_on(outputStream* st) const {
     generic_signature()->print_value_on(st);
     st->cr();
   }
-  st->print(BULLET"inner classes:     "); inner_classes()->print_value_on(st);     st->cr();
-  st->print(BULLET"nest members:     "); nest_members()->print_value_on(st);     st->cr();
+  st->print(BULLET"inner classes:     "); inner_classes()->print_value_on(st);
+  if (inner_classes() == Universe::the_empty_short_array()) {
+    st->print(" [EMPTY]");
+  } else {
+    st->print(" [ ");
+    InnerClassesIterator iter(this);
+    for (; !iter.done(); iter.next()) {
+      st->print("%s ", this->constants()->klass_name_at(iter.inner_class_info_index())->as_C_string());
+    }
+    st->print(" ]");
+  }
+  st->cr();
+  st->print(BULLET"nest members:     "); nest_members()->print_value_on(st);
+  if (nest_members() == Universe::the_empty_short_array()) {
+    st->print(" [EMPTY]");
+  } else {
+    st->print(" [ ");
+    for (int i = 0; i < nest_members()->length(); i++) {
+      st->print("%s ", this->constants()->klass_name_at(nest_members()->at(i))->as_C_string());
+    }
+    st->print(" ]");
+  }
+  st->cr();
   if (record_components() != NULL) {
     st->print(BULLET"record components:     "); record_components()->print_value_on(st);     st->cr();
   }
-  st->print(BULLET"permitted subclasses:     "); permitted_subclasses()->print_value_on(st);     st->cr();
+  st->print(BULLET"permitted subclasses:     "); permitted_subclasses()->print_value_on(st);
+  if (permitted_subclasses() == Universe::the_empty_short_array()) {
+    st->print(" [EMPTY]");
+  } else {
+    st->print(" [ ");
+    for (int i = 0; i < permitted_subclasses()->length(); i++) {
+      st->print("%s ", this->constants()->klass_name_at(permitted_subclasses()->at(i))->as_C_string());
+    }
+    st->print(" ]");
+  }
+  st->cr();
   if (java_mirror() != NULL) {
     st->print(BULLET"java mirror:       ");
     java_mirror()->print_value_on(st);
