@@ -84,10 +84,10 @@ inline class MyValue {
 
     MyValue incrementAndCheckUnsafe() {
         Asserts.assertEQ(x, y, "Inconsistent field values");
-        MyValue vt = U.makePrivateBuffer(this);
-        U.putInt(vt, X_OFFSET, x + 1);
-        U.putInt(vt, Y_OFFSET, y + 1);
-        return U.finishPrivateBuffer(vt);
+        Object o = U.makePrivateBuffer(this);
+        U.putInt(o, X_OFFSET, x + 1);
+        U.putInt(o, Y_OFFSET, y + 1);
+        return U.finishPrivateBuffer(o);
     }
 }
 

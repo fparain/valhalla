@@ -297,7 +297,7 @@ public final class Unsafe {
      * @param <V> the type of the given value instance
      */
     @IntrinsicCandidate
-    public native <V> V makePrivateBuffer(V value);
+    public native <V> Object makePrivateBuffer(V value);
 
     /**
      * Exits the larval state and returns a value instance.
@@ -306,7 +306,7 @@ public final class Unsafe {
      * @param <V> the type of the given value instance
      */
     @IntrinsicCandidate
-    public native <V> V finishPrivateBuffer(V value);
+    public native <V> V finishPrivateBuffer(Object value);
 
     /**
      * Returns the header size of the given inline class

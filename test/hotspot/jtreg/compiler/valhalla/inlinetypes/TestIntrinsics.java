@@ -391,9 +391,10 @@ public class TestIntrinsics extends InlineTypeTest {
     MyValue1 test22_vt;
     @Test(failOn=CALL_Unsafe + ALLOC)
     public void test22(MyValue1 v) {
-        v = U.makePrivateBuffer(v);
-        U.putInt(v, X_OFFSET, rI);
-        v = U.finishPrivateBuffer(v);
+        Object o;
+        o = U.makePrivateBuffer(v);
+        U.putInt(o, X_OFFSET, rI);
+        v = U.finishPrivateBuffer(o);
         test22_vt = v;
     }
 
@@ -723,9 +724,9 @@ public class TestIntrinsics extends InlineTypeTest {
 
     @Test(failOn=CALL_Unsafe)
     public MyValue1 test39(MyValue1 v) {
-        v = U.makePrivateBuffer(v);
-        U.putInt(v, X_OFFSET, rI);
-        v = U.finishPrivateBuffer(v);
+        Object o = U.makePrivateBuffer(v);
+        U.putInt(o, X_OFFSET, rI);
+        v = U.finishPrivateBuffer(o);
         return v;
     }
 
@@ -1011,16 +1012,16 @@ public class TestIntrinsics extends InlineTypeTest {
 
     // Same as test39 but Unsafe.putInt to buffer is not intrinsified/compiled
     @DontCompile
-    public void test54_callee(MyValue1.ref v) { // Use .ref here to make sure the argument is not scalarized (otherwise larval information is lost)
+    public void test54_callee(Object v) { // Use .ref here to make sure the argument is not scalarized (otherwise larval information is lost)
         U.putInt(v, X_OFFSET, rI);
     }
 
     @Test()
     @Warmup(10000) // Fill up the TLAB to trigger slow path allocation
     public MyValue1 test54(MyValue1 v) {
-        v = U.makePrivateBuffer(v);
-        test54_callee(v);
-        v = U.finishPrivateBuffer(v);
+        Object o = U.makePrivateBuffer(v);
+        test54_callee(o);
+        v = U.finishPrivateBuffer(o);
         return v;
     }
 

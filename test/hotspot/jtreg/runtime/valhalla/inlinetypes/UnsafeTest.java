@@ -100,17 +100,18 @@ public class UnsafeTest {
          */
         List<String> list = List.of("Value1", "Value2", "Value3");
         Value3 v = v3;
+        Object o = null;
         try {
-            v = U.makePrivateBuffer(v);
+            o = U.makePrivateBuffer(v);
             // patch v3.o
-            U.putObject(v, off_o, list);
+            U.putObject(o, off_o, list);
             // patch v3.v.i;
-            U.putInt(v, off_v + off_i - U.valueHeaderSize(Value2.class), 999);
+            U.putInt(o, off_v + off_i - U.valueHeaderSize(Value2.class), 999);
             // patch v3.v.v.point
-            U.putValue(v, off_v + off_v2 - U.valueHeaderSize(Value2.class) + off_point - U.valueHeaderSize(Value1.class),
+            U.putValue(o, off_v + off_v2 - U.valueHeaderSize(Value2.class) + off_point - U.valueHeaderSize(Value1.class),
                        Point.class, Point.createPoint(100, 100));
         } finally {
-            v = U.finishPrivateBuffer(v);
+            v = U.finishPrivateBuffer(o);
         }
 
         assertEquals(v.v.v.point, Point.createPoint(100, 100));
@@ -123,11 +124,11 @@ public class UnsafeTest {
         Value3 nv3 = new Value3(nv2, list);
 
         try {
-            v = U.makePrivateBuffer(v);
+            o = U.makePrivateBuffer(v);
             // patch v3.v
-            U.putValue(v, off_v2, Value2.class, nv2);
+            U.putValue(o, off_v2, Value2.class, nv2);
         } finally {
-            v = U.finishPrivateBuffer(v);
+            v = U.finishPrivateBuffer(o);
         }
         assertEquals(v, nv3);
     }
