@@ -252,6 +252,42 @@ private:
     }
   };
 
+  // -------------------------------------------------- MetaspaceObjArrayRef
+  template <class T = MetaspaceObj> class MetaspaceObjArrayRef : public Ref {
+    Array<T>** _mpp;
+    Array<T>* dereference() const {
+      return *_mpp;
+    }
+  protected:
+    virtual void** mpp() const {
+      return (void**)_mpp;
+    }
+
+  public:
+    MetaspaceObjArrayRef(Array<T>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
+
+    // all Arrays are read-only by default
+    virtual bool is_read_only_by_default() const { return true; }
+    virtual bool not_null()                const { return dereference() != NULL; }
+    virtual int size()                     const { return dereference()->size(); }
+    virtual MetaspaceObj::Type msotype()   const { return MetaspaceObj::array_type(sizeof(T)); }
+
+    virtual void metaspace_pointers_do(MetaspaceClosure *it) const {
+      metaspace_pointers_do_at_impl(it, dereference());
+    }
+    virtual void metaspace_pointers_do_at(MetaspaceClosure *it, address new_loc) const {
+      metaspace_pointers_do_at_impl(it, (Array<T>*)new_loc);
+    }
+  private:
+    void metaspace_pointers_do_at_impl(MetaspaceClosure *it, Array<T>* array) const {
+      log_trace(cds)("Iter(ObjectArray): %p [%d]", array, array->length());
+      for (int i = 0; i < array->length(); i++) {
+        T* elm = array->adr_at(i);
+        elm->metaspace_pointers_do(it);
+      }
+    }
+  };
+
   // Normally, chains of references like a->b->c->d are iterated recursively. However,
   // if recursion is too deep, we save the Refs in _pending_refs, and push them later in
   // MetaspaceClosure::finish(). This avoids overflowing the C stack.
@@ -291,6 +327,18 @@ public:
 
   // returns true if we want to keep iterating the pointers embedded inside <ref>
   virtual bool do_ref(Ref* ref, bool read_only) = 0;
+
+   // ?? This function cannot be named push() -- gcc says it conflicts with the other push(Array<T>**, Writability)
+  // For pushing pointers to arrays of MetaspaceObj. E.g.,
+  //
+  // Class Foo : public Metadata {
+  //    Array<Annotations>* _annos;
+  //    void metaspace_pointers_do(MetaspaceClosure* it) {
+  //      it->push_metaspaceobj_array(&_annos);
+  //   }
+  template <class T = MetaspaceObj> void push_metaspaceobj_array(Array<T>** mpp, Writability w = _default) {
+    push_impl(new MetaspaceObjArrayRef<T>(mpp, w));
+  }
 
   // When you do:
   //     void MyType::metaspace_pointers_do(MetaspaceClosure* it) {

@@ -118,6 +118,7 @@ class MacroAssembler: public Assembler {
   void test_field_is_inline_type(Register flags, Register temp_reg, Label& is_inline);
   void test_field_is_not_inline_type(Register flags, Register temp_reg, Label& not_inline);
   void test_field_is_inlined(Register flags, Register temp_reg, Label& is_inlined);
+  void test_field_is_virtual(Register flags, Register temp_reg, Label& is_virtual);
 
   // Check oops for special arrays, i.e. flattened and/or null-free
   void test_oop_prototype_bit(Register oop, Register temp_reg, int32_t test_bit, bool jmp_set, Label& jmp_label);

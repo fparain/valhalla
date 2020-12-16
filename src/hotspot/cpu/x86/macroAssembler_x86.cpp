@@ -2721,6 +2721,14 @@ void MacroAssembler::test_field_is_inlined(Register flags, Register temp_reg, La
   jcc(Assembler::notZero, is_inlined);
 }
 
+void MacroAssembler::test_field_is_virtual(Register flags, Register temp_reg, Label& is_virtual) {
+  movl(temp_reg, flags);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_virtual_index_shift);
+  andl(temp_reg, 0x1);
+  testl(temp_reg, temp_reg);
+  jcc(Assembler::notZero, is_virtual);
+}
+
 void MacroAssembler::test_oop_prototype_bit(Register oop, Register temp_reg, int32_t test_bit, bool jmp_set, Label& jmp_label) {
   Label test_mark_word;
   // load mark word

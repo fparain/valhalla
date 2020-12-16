@@ -72,6 +72,12 @@ class InterpreterRuntime: AllStatic {
 
   static jboolean is_substitutable(JavaThread* thread, oopDesc* aobj, oopDesc* bobj);
 
+  // Fields
+  static jint  get_offset_for_virtual_field(JavaThread* thread, oopDesc* obj, jint index);
+  static void    get_virtual_field_value(JavaThread* thread, oopDesc* obj, jint offset /* later will be global index */);
+static void      put_virtual_field_value(JavaThread* thread, oopDesc* obj, jint offset /* later will be global index */);
+
+
   // Quicken instance-of and check-cast bytecodes
   static void    quicken_io_cc(JavaThread* thread);
 

@@ -585,6 +585,7 @@ InstanceKlass::InstanceKlass(const ClassFileParser& parser, unsigned kind, Klass
   _init_state(allocated),
   _reference_type(parser.reference_type()),
   _init_thread(NULL),
+  _virtual_fields(NULL),
   _inline_type_field_klasses(NULL),
   _adr_inlineklass_fixed_block(NULL)
 {
@@ -741,6 +742,11 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
     MetadataFactory::free_array<jushort>(loader_data, fields());
   }
   set_fields(NULL, 0);
+
+  if (_virtual_fields != NULL) {
+    MetadataFactory::free_array<VirtualFieldInfo>(loader_data, virtual_fields());
+  }
+  set_virtual_fields(NULL);
 
   // If a method from a redefined class is using this constant pool, don't
   // delete it, yet.  The new class's previous version will point to this.
@@ -2611,6 +2617,7 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
   it->push(&_method_ordering);
   it->push(&_default_vtable_indices);
   it->push(&_fields);
+  it->push_metaspaceobj_array(&_virtual_fields);
 
   if (itable_length() > 0) {
     itableOffsetEntry* ioe = (itableOffsetEntry*)start_of_itable();

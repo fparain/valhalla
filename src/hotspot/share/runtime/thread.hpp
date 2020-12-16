@@ -1071,6 +1071,7 @@ class JavaThread: public Thread {
   oop           _vm_result;    // oop result is GC-preserved
   Metadata*     _vm_result_2;  // non-oop result
   oop           _return_buffered_value; // buffered value being returned
+  jvalue        _return_value;
 
   // See ReduceInitialCardMarks: this holds the precise space interval of
   // the most recent slow path allocation for which compiled code has
@@ -1505,7 +1506,21 @@ class JavaThread: public Thread {
   void set_vm_result  (oop x)                    { _vm_result   = x; }
 
   Metadata*    vm_result_2() const               { return _vm_result_2; }
-  void set_vm_result_2  (Metadata* x)          { _vm_result_2   = x; }
+  void set_vm_result_2  (Metadata* x)            { _vm_result_2   = x; }
+
+  jvalue return_value() const                    { return _return_value; }
+  void set_return_value_boolean(jboolean z)      { _return_value.z = z; }
+  void set_return_value_byte(jbyte b)            { _return_value.b = b; }
+  void set_return_value_char(jchar c)            { _return_value.c = c; }
+  void set_return_value_short(jshort s)          { _return_value.s = s; }
+  void set_return_value_int(jint i)              { _return_value.i = i; }
+  void set_return_value_long(jlong j)            { _return_value.j = j; }
+  void set_return_value_float(jfloat f)          { _return_value.f = f; }
+  void set_return_value_double(jdouble d)        { _return_value.d = d; }
+  // The _return_value field is not processed by oops_do() so don't store object references in it
+  // The correct way to return an object reference is to use the _vm_result field
+  void set_return_value_object(jobject o)        { fatal("Objects should never be stored in this union"); }
+  void set_return_value_valuetype(jvaluetype q)  { fatal("Inline types should never be stored in this union"); }
 
   oop return_buffered_value() const              { return _return_buffered_value; }
   void set_return_buffered_value(oop val)        { _return_buffered_value = val; }
@@ -1574,6 +1589,7 @@ class JavaThread: public Thread {
   static ByteSize callee_target_offset()         { return byte_offset_of(JavaThread, _callee_target); }
   static ByteSize vm_result_offset()             { return byte_offset_of(JavaThread, _vm_result); }
   static ByteSize vm_result_2_offset()           { return byte_offset_of(JavaThread, _vm_result_2); }
+  static ByteSize return_value_int_offset()      { return byte_offset_of(JavaThread, _return_value.i); }
   static ByteSize return_buffered_value_offset() { return byte_offset_of(JavaThread, _return_buffered_value); }
   static ByteSize thread_state_offset()          { return byte_offset_of(JavaThread, _thread_state); }
   static ByteSize saved_exception_pc_offset()    { return byte_offset_of(JavaThread, _saved_exception_pc); }

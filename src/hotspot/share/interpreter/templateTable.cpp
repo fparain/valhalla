@@ -231,6 +231,7 @@ void TemplateTable::initialize() {
   const int  disp = 1 << Template::does_dispatch_bit;
   const int  clvm = 1 << Template::calls_vm_bit;
   const int  iswd = 1 << Template::wide_bit;
+  const int  vfld = UseVirtualFields ? clvm : 0;  // use VM calls if virtual fields are used
 
   //                                    interpr. templates
   // Java spec bytecodes                ubcp|disp|clvm|iswd  in    out   generator             argument
@@ -462,7 +463,7 @@ void TemplateTable::initialize() {
   def(Bytecodes::_fast_cgetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
   def(Bytecodes::_fast_dgetfield      , ubcp|____|____|____, atos, dtos, fast_accessfield    ,  dtos        );
   def(Bytecodes::_fast_fgetfield      , ubcp|____|____|____, atos, ftos, fast_accessfield    ,  ftos        );
-  def(Bytecodes::_fast_igetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
+  def(Bytecodes::_fast_igetfield      , ubcp|____|vfld|____, atos, itos, fast_accessfield    ,  itos        );
   def(Bytecodes::_fast_lgetfield      , ubcp|____|____|____, atos, ltos, fast_accessfield    ,  ltos        );
   def(Bytecodes::_fast_sgetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
 
@@ -473,7 +474,7 @@ void TemplateTable::initialize() {
   def(Bytecodes::_fast_cputfield      , ubcp|____|____|____, itos, vtos, fast_storefield  ,  itos        );
   def(Bytecodes::_fast_dputfield      , ubcp|____|____|____, dtos, vtos, fast_storefield  ,  dtos        );
   def(Bytecodes::_fast_fputfield      , ubcp|____|____|____, ftos, vtos, fast_storefield  ,  ftos        );
-  def(Bytecodes::_fast_iputfield      , ubcp|____|____|____, itos, vtos, fast_storefield  ,  itos        );
+  def(Bytecodes::_fast_iputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield  ,  itos        );
   def(Bytecodes::_fast_lputfield      , ubcp|____|____|____, ltos, vtos, fast_storefield  ,  ltos        );
   def(Bytecodes::_fast_sputfield      , ubcp|____|____|____, itos, vtos, fast_storefield  ,  itos        );
 

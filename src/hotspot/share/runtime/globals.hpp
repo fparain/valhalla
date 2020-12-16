@@ -2537,6 +2537,9 @@ const intx ObjectAlignmentInBytes = 8;
           false AARCH64_ONLY(DEBUG_ONLY(||true)),                           \
              "Mark all threads after a safepoint, and clear on a modify "   \
              "fence. Add cleanliness checks.")                              \
+                                                                            \
+  product(bool, UseVirtualFields, false,                                    \
+           "Use VirtualField info for field access")                        \
 
 // end of RUNTIME_FLAGS
 

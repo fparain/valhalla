@@ -33,6 +33,7 @@
 #include "oops/fieldInfo.hpp"
 #include "oops/instanceOop.hpp"
 #include "oops/klassVtable.hpp"
+#include "oops/virtualFieldInfo.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/os.hpp"
 #include "utilities/accessFlags.hpp"
@@ -356,6 +357,7 @@ class InstanceKlass: public Klass {
   //     [generic signature index]
   //     ...
   Array<u2>*      _fields;
+  Array<VirtualFieldInfo>* _virtual_fields;
   const Klass**   _inline_type_field_klasses; // For "inline class" fields, NULL if none present
 
   const InlineKlassFixedBlock* _adr_inlineklass_fixed_block;
@@ -559,6 +561,9 @@ class InstanceKlass: public Klass {
     _java_fields_count = java_fields_count;
   }
 
+  Array<VirtualFieldInfo>* virtual_fields() const { return _virtual_fields; }
+  void set_virtual_fields(Array<VirtualFieldInfo>* vfa) { _virtual_fields = vfa; }
+
   // inner classes
   Array<u2>* inner_classes() const       { return _inner_classes; }
   void set_inner_classes(Array<u2>* f)   { _inner_classes = f; }
@@ -675,6 +680,7 @@ public:
   bool is_marked_dependent() const         { return _is_marked_dependent; }
   void set_is_marked_dependent(bool value) { _is_marked_dependent = value; }
 
+  static ByteSize virtual_fields_offset() { return in_ByteSize(offset_of(InstanceKlass, _virtual_fields)); }
   static ByteSize kind_offset() { return in_ByteSize(offset_of(InstanceKlass, _kind)); }
   static ByteSize misc_flags_offset() { return in_ByteSize(offset_of(InstanceKlass, _misc_flags)); }
   static u4 misc_flags_is_empty_inline_type() { return _misc_is_empty_inline_type; }

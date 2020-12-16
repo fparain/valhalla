@@ -5906,6 +5906,48 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
     InlineKlass::cast(ik)->initialize_calling_convention(CHECK);
   }
 
+  // Initializing virtual fields array
+  // could be optimized if current class declares no fields, array from super klass can be re-used
+  GrowableArray<Klass*>* all_supers = new GrowableArray<Klass*>();
+  Klass* cur = ik;
+  int total_field_count = 0;
+  while (cur != NULL) {
+    all_supers->append(cur);
+    total_field_count += InstanceKlass::cast(cur)->java_fields_count();
+    cur = cur->super();
+  }
+  Array<VirtualFieldInfo>* vfields = MetadataFactory::new_array<VirtualFieldInfo>(ik->class_loader_data(),
+                                     total_field_count, CHECK);
+  int index = 0;
+  for (int i = all_supers->length() - 1; i >= 0; i--) {
+    Klass* k = all_supers->at(i);
+    for (JavaFieldStream fs(InstanceKlass::cast(k)); !fs.done(); fs.next()) {
+      VirtualFieldInfo* vfi = vfields->adr_at(index);
+      vfi->set_holder(k);
+      vfi->set_local_index(fs.index());
+      vfi->set_offset(fs.offset());
+      BasicType bt = fs.field_descriptor().field_type();
+      vfi->set_basic_type(bt);
+      // if (is_reference_type(bt)) { // Handling of _type_klass is expensive, should be done lazely
+      //   Klass* tk = NULL;
+      //   if (k != ik) {
+      //     ResolvingSignatureStream rss(fs.signature(), k, false);
+      //     tk = rss.as_klass_if_loaded(THREAD);
+      //   } else {
+      //     ResolvingSignatureStream rss(fs.signature(), Handle(THREAD, _loader_data->class_loader()) , _protection_domain, false);
+      //     tk = rss.as_klass_if_loaded(THREAD);
+      //   }
+      //     assert(!HAS_PENDING_EXCEPTION, "as_klass_if_loaded contract");
+      //   vfi->set_type_klass(tk);
+      // } else {
+      //   vfi->set_type_klass(NULL);
+      // }
+      vfi->set_type_klass(NULL);
+      index++;
+    }
+  }
+  InstanceKlass::cast(ik)->set_virtual_fields(vfields);
+
   ClassLoadingService::notify_class_loaded(ik, false /* not shared class */);
 
   if (!is_internal()) {

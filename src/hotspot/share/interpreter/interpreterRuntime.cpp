@@ -314,8 +314,16 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* thread, ConstantPoolCac
   // Getting Field information
   int offset = cp_entry->f2_as_index();
   int field_index = cp_entry->field_index();
-  int field_offset = cp_entry->f2_as_offset();
-  Symbol* field_signature = vklass->field_signature(field_index);
+  int field_offset;
+  int local_index;
+  if (UseVirtualFields && cp_entry->is_virtual_index()) {
+    field_offset = vklass->virtual_fields()->adr_at(field_index)->offset();
+    local_index = vklass->virtual_fields()->adr_at(field_index)->local_index();
+  } else {
+    field_offset = cp_entry->f2_as_offset();
+    local_index = field_index;
+  }
+  Symbol* field_signature = vklass->field_signature(local_index);
   BasicType field_type = Signature::basic_type(field_signature);
   int return_offset = (type2size[field_type] + type2size[T_OBJECT]) * AbstractInterpreter::stackElementSize;
 
@@ -342,7 +350,7 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* thread, ConstantPoolCac
     if (cp_entry->is_inlined()) {
       oop vt_oop = *(oop*)f.interpreter_frame_expression_stack_at(tos_idx);
       assert(vt_oop != NULL && oopDesc::is_oop(vt_oop) && vt_oop->is_inline_type(),"argument must be an inline type");
-      InlineKlass* field_vk = InlineKlass::cast(vklass->get_inline_type_field_klass(field_index));
+      InlineKlass* field_vk = InlineKlass::cast(vklass->get_inline_type_field_klass(local_index));
       assert(vt_oop != NULL && field_vk == vt_oop->klass(), "Must match");
       field_vk->write_inlined_field(new_value_h(), offset, vt_oop, CHECK_(return_offset));
     } else { // not inlined
@@ -941,21 +949,127 @@ void InterpreterRuntime::resolve_get_put(JavaThread* thread, Bytecodes::Code byt
     }
   }
 
+  int offset = info.offset();
+  int local_index = info.index();
+  bool is_virtual_field = false;
+
+  if (UseVirtualFields && !is_static) {
+    assert(klass->virtual_fields() != NULL, "Sanity check");
+    int gidx = 0;
+    Array<VirtualFieldInfo>* vfia = klass->virtual_fields();
+    while (gidx < vfia->length()) {
+      VirtualFieldInfo* vfi = vfia->adr_at(gidx);
+      if (vfi->holder() == klass && vfi->local_index() == info.index()) {
+        break;
+      }
+      gidx++;
+    }
+    assert(gidx < vfia->length(), "Otherwise it means the field has not be found");
+    // Use virtual fields for some fields but not for all to test code having to handle both
+    if (info.field_type() == T_INT && !is_static && (offset%16 == 0)) {
+      offset = gidx;
+      is_virtual_field = true;
+    } else {
+      // Doing nothing, this field will be marked as a non virtual field
+    }
+  }
+
   cp_cache_entry->set_field(
     get_code,
     put_code,
     info.field_holder(),
     info.index(),
-    info.offset(),
+    offset,
     state,
     info.access_flags().is_final(),
     info.access_flags().is_volatile(),
     info.is_inlined(),
     info.is_inline_type(),
+    is_virtual_field,
     pool->pool_holder()
   );
 }
 
+JRT_ENTRY(void, InterpreterRuntime::get_virtual_field_value(JavaThread* thread, oopDesc* obj, jint gindex))
+
+  assert(obj != NULL, "NULL receiver should have been handled by the assembly code");
+  InstanceKlass* ik = InstanceKlass::cast(obj->klass());
+  Handle obj_h(THREAD, obj); // Do we need that?
+
+  VirtualFieldInfo *vfi = ik->virtual_fields()->adr_at(gindex);
+
+  assert(vfi != NULL, "Not found");
+  switch(vfi->basic_type()) {
+    case T_BOOLEAN:
+      thread->set_return_value_boolean(obj_h()->bool_field(vfi->offset()));
+      break;
+    case T_BYTE:
+      thread->set_return_value_byte(obj_h()->byte_field(vfi->offset()));
+      break;
+    case T_CHAR:
+      thread->set_return_value_char(obj_h()->char_field(vfi->offset()));
+      break;
+    case T_SHORT:
+      thread->set_return_value_short(obj_h()->short_field(vfi->offset()));
+      break;
+    case T_INT:
+      thread->set_return_value_int(obj_h()->int_field(vfi->offset()));
+      break;
+    case T_LONG:
+      thread->set_return_value_long(obj_h()->long_field(vfi->offset()));
+      break;
+    case T_FLOAT:
+      thread->set_return_value_float(obj_h()->float_field(vfi->offset()));
+      break;
+    case T_DOUBLE:
+      thread->set_return_value_double(obj_h()->double_field(vfi->offset()));
+      break;
+    case T_OBJECT:
+      thread->set_vm_result(obj_h()->obj_field(vfi->offset()));
+      break;
+    default:
+      fatal("Should not reach here, not supported yet");
+  }
+JRT_END
+
+JRT_ENTRY(void, InterpreterRuntime::put_virtual_field_value(JavaThread* thread, oopDesc* obj, jint gindex))
+  assert(obj != NULL, "NULL receiver should have been handled by the assembly code");
+  InstanceKlass* ik = InstanceKlass::cast(obj->klass());
+  Handle obj_h(THREAD, obj); // Do we need that?
+
+  VirtualFieldInfo *vfi = ik->virtual_fields()->adr_at(gindex);
+
+  assert(vfi != NULL, "Not found");
+  switch(vfi->basic_type()) {
+    case T_BOOLEAN:
+      obj_h()->bool_field_put(vfi->offset(), thread->return_value().z);
+      break;
+    case T_BYTE:
+      obj_h()->byte_field_put(vfi->offset(), thread->return_value().b);
+      break;
+    case T_CHAR:
+      obj_h()->char_field_put(vfi->offset(), thread->return_value().c);
+      break;
+    case T_SHORT:
+      obj_h()->short_field_put(vfi->offset(), thread->return_value().s);
+      break;
+    case T_INT:
+      obj_h()->int_field_put(vfi->offset(), thread->return_value().i);
+      break;
+    case T_LONG:
+      obj_h()->long_field_put(vfi->offset(), thread->return_value().j);
+      break;
+    case T_FLOAT:
+      obj_h()->float_field_put(vfi->offset(), thread->return_value().f);
+      break;
+    case T_DOUBLE:
+      obj_h()->double_field_put(vfi->offset(), thread->return_value().d);
+      break;
+    default:
+      fatal("Should not reach here, not supported yet");
+  }
+
+JRT_END
 
 //------------------------------------------------------------------------------------------------------------------------
 // Synchronization

@@ -40,6 +40,7 @@ class fieldDescriptor {
  private:
   AccessFlags         _access_flags;
   int                 _index; // the field index
+  int                 _global_index; // field's global index
   constantPoolHandle  _cp;
 
   // update the access_flags for the field in the klass

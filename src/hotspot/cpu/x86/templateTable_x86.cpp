@@ -622,7 +622,7 @@ void TemplateTable::nofast_iload() {
 
 void TemplateTable::iload_internal(RewriteControl rc) {
   transition(vtos, itos);
-  if (RewriteFrequentPairs && rc == may_rewrite) {
+  if (RewriteFrequentPairs && rc == may_rewrite && !UseVirtualFields) {
     Label rewrite, done;
     const Register bc = LP64_ONLY(c_rarg3) NOT_LP64(rcx);
     LP64_ONLY(assert(rbx != bc, "register damaged"));
@@ -951,7 +951,7 @@ void TemplateTable::aload_0_internal(RewriteControl rc) {
   //   aload_0, iload_1
   // These bytecodes with a small amount of code are most profitable
   // to rewrite
-  if (RewriteFrequentPairs && rc == may_rewrite) {
+  if (RewriteFrequentPairs && rc == may_rewrite && !UseVirtualFields) {
     Label rewrite, done;
 
     const Register bc = LP64_ONLY(c_rarg3) NOT_LP64(rcx);
@@ -3145,7 +3145,19 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   __ cmpl(flags, itos);
   __ jcc(Assembler::notEqual, notInt);
   // itos
-  __ access_load_at(T_INT, IN_HEAP, rax, field, noreg, noreg);
+  if (UseVirtualFields && !is_static) {
+    Label virtual_int_field, int_field_done;
+    __ test_field_is_virtual(flags2, rax, virtual_int_field);
+    __ access_load_at(T_INT, IN_HEAP, rax, field, noreg, noreg);
+    __ jmp(int_field_done);
+    __ bind(virtual_int_field);
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::get_virtual_field_value),
+          obj, off);
+    __ movl(rax, Address(r15_thread, JavaThread::return_value_int_offset()));
+    __ bind(int_field_done);
+  } else {
+    __ access_load_at(T_INT, IN_HEAP, rax, field, noreg, noreg);
+  }
   __ push(itos);
   // Rewrite bytecode to be faster
   if (!is_static && rc == may_rewrite) {
@@ -3497,7 +3509,19 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   {
     __ pop(itos);
     if (!is_static) pop_and_check_object(obj);
-    __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+    if (UseVirtualFields && !is_static) {
+      Label virtual_int_field, int_field_done;
+      __ test_field_is_virtual(flags2, rscratch2, virtual_int_field);
+      __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+      __ jmp(int_field_done);
+      __ bind(virtual_int_field);
+      __ movl(Address(r15_thread, JavaThread::return_value_int_offset()), rax);
+      call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::put_virtual_field_value),
+            obj, off);
+      __ bind(int_field_done);
+    } else {
+      __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+    }
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_iputfield, bc, rbx, true, byte_no);
     }
@@ -3691,7 +3715,7 @@ void TemplateTable::fast_storefield(TosState state) {
   //                                              Assembler::StoreStore));
 
   Label notVolatile, Done;
-  if (bytecode() == Bytecodes::_fast_qputfield) {
+  if (bytecode() == Bytecodes::_fast_qputfield || bytecode() == Bytecodes::_fast_iputfield) {
     __ movl(rscratch2, rdx);  // saving flags for is_inlined test
   }
 
@@ -3708,7 +3732,9 @@ void TemplateTable::fast_storefield(TosState state) {
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
 
-  if (bytecode() == Bytecodes::_fast_qputfield) {
+  // rdx restoration below would be extended to all bytecodes once
+  // virtual fields are enabled for all basic types
+  if (bytecode() == Bytecodes::_fast_qputfield || bytecode() == Bytecodes::_fast_iputfield) {
     __ movl(rdx, rscratch2);  // restoring flags for is_inlined test
   }
   fast_storefield_helper(field, rax, rdx);
@@ -3717,7 +3743,7 @@ void TemplateTable::fast_storefield(TosState state) {
   __ jmp(Done);
   __ bind(notVolatile);
 
-  if (bytecode() == Bytecodes::_fast_qputfield) {
+  if (bytecode() == Bytecodes::_fast_qputfield || bytecode() == Bytecodes::_fast_iputfield) {
     __ movl(rdx, rscratch2);  // restoring flags for is_inlined test
   }
   fast_storefield_helper(field, rax, rdx);
@@ -3759,7 +3785,19 @@ void TemplateTable::fast_storefield_helper(Address field, Register rax, Register
 #endif
     break;
   case Bytecodes::_fast_iputfield:
-    __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+    if (UseVirtualFields) {
+      Label virtual_int_field, int_field_done;
+      __ test_field_is_virtual(flags, rscratch1, virtual_int_field);
+      __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+      __ jmp(int_field_done);
+      __ bind(virtual_int_field);
+      __ movl(Address(r15_thread, JavaThread::return_value_int_offset()), rax);
+      call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::put_virtual_field_value),
+            rcx, rbx);
+      __ bind(int_field_done);
+    } else {
+        __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+    }
     break;
   case Bytecodes::_fast_zputfield:
     __ access_store_at(T_BOOLEAN, IN_HEAP, field, rax, noreg, noreg);
@@ -3881,7 +3919,22 @@ void TemplateTable::fast_accessfield(TosState state) {
 #endif
     break;
   case Bytecodes::_fast_igetfield:
+    if (UseVirtualFields) {
+          Label virtual_int_field, int_field_done;
+    __ movptr(rscratch1, Address(rcx, rbx, Address::times_ptr,
+                                   in_bytes(ConstantPoolCache::base_offset() +
+                                            ConstantPoolCacheEntry::flags_offset())));
+    __ test_field_is_virtual(rscratch1, rscratch2, virtual_int_field);
     __ access_load_at(T_INT, IN_HEAP, rax, field, noreg, noreg);
+    __ jmp(int_field_done);
+    __ bind(virtual_int_field);
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::get_virtual_field_value),
+          rax, rdx);
+    __ movl(rax, Address(r15_thread, JavaThread::return_value_int_offset()));
+    __ bind(int_field_done);
+    } else {
+      __ access_load_at(T_INT, IN_HEAP, rax, field, noreg, noreg);
+    }
     break;
   case Bytecodes::_fast_bgetfield:
     __ access_load_at(T_BYTE, IN_HEAP, rax, field, noreg, noreg);
