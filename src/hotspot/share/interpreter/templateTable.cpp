@@ -457,26 +457,26 @@ void TemplateTable::initialize() {
   def(Bytecodes::_breakpoint          , ubcp|disp|clvm|____, vtos, vtos, _breakpoint         ,  _           );
 
   // JVM bytecodes
-  def(Bytecodes::_fast_agetfield      , ubcp|____|____|____, atos, atos, fast_accessfield    ,  atos        );
+  def(Bytecodes::_fast_agetfield      , ubcp|____|vfld|____, atos, atos, fast_accessfield    ,  atos        );
   def(Bytecodes::_fast_qgetfield      , ubcp|____|clvm|____, atos, atos, fast_accessfield    ,  atos        );
-  def(Bytecodes::_fast_bgetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
-  def(Bytecodes::_fast_cgetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
-  def(Bytecodes::_fast_dgetfield      , ubcp|____|____|____, atos, dtos, fast_accessfield    ,  dtos        );
-  def(Bytecodes::_fast_fgetfield      , ubcp|____|____|____, atos, ftos, fast_accessfield    ,  ftos        );
+  def(Bytecodes::_fast_bgetfield      , ubcp|____|vfld|____, atos, itos, fast_accessfield    ,  itos        );
+  def(Bytecodes::_fast_cgetfield      , ubcp|____|vfld|____, atos, itos, fast_accessfield    ,  itos        );
+  def(Bytecodes::_fast_dgetfield      , ubcp|____|vfld|____, atos, dtos, fast_accessfield    ,  dtos        );
+  def(Bytecodes::_fast_fgetfield      , ubcp|____|vfld|____, atos, ftos, fast_accessfield    ,  ftos        );
   def(Bytecodes::_fast_igetfield      , ubcp|____|vfld|____, atos, itos, fast_accessfield    ,  itos        );
-  def(Bytecodes::_fast_lgetfield      , ubcp|____|____|____, atos, ltos, fast_accessfield    ,  ltos        );
-  def(Bytecodes::_fast_sgetfield      , ubcp|____|____|____, atos, itos, fast_accessfield    ,  itos        );
+  def(Bytecodes::_fast_lgetfield      , ubcp|____|vfld|____, atos, ltos, fast_accessfield    ,  ltos        );
+  def(Bytecodes::_fast_sgetfield      , ubcp|____|vfld|____, atos, itos, fast_accessfield    ,  itos        );
 
-  def(Bytecodes::_fast_aputfield      , ubcp|____|____|____, atos, vtos, fast_storefield ,   atos        );
+  def(Bytecodes::_fast_aputfield      , ubcp|____|vfld|____, atos, vtos, fast_storefield ,   atos        );
   def(Bytecodes::_fast_qputfield      , ubcp|____|clvm|____, atos, vtos, fast_storefield ,   atos        );
-  def(Bytecodes::_fast_bputfield      , ubcp|____|____|____, itos, vtos, fast_storefield ,   itos        );
-  def(Bytecodes::_fast_zputfield      , ubcp|____|____|____, itos, vtos, fast_storefield ,   itos        );
-  def(Bytecodes::_fast_cputfield      , ubcp|____|____|____, itos, vtos, fast_storefield  ,  itos        );
-  def(Bytecodes::_fast_dputfield      , ubcp|____|____|____, dtos, vtos, fast_storefield  ,  dtos        );
-  def(Bytecodes::_fast_fputfield      , ubcp|____|____|____, ftos, vtos, fast_storefield  ,  ftos        );
+  def(Bytecodes::_fast_bputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield ,   itos        );
+  def(Bytecodes::_fast_zputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield ,   itos        );
+  def(Bytecodes::_fast_cputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield  ,  itos        );
+  def(Bytecodes::_fast_dputfield      , ubcp|____|vfld|____, dtos, vtos, fast_storefield  ,  dtos        );
+  def(Bytecodes::_fast_fputfield      , ubcp|____|vfld|____, ftos, vtos, fast_storefield  ,  ftos        );
   def(Bytecodes::_fast_iputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield  ,  itos        );
-  def(Bytecodes::_fast_lputfield      , ubcp|____|____|____, ltos, vtos, fast_storefield  ,  ltos        );
-  def(Bytecodes::_fast_sputfield      , ubcp|____|____|____, itos, vtos, fast_storefield  ,  itos        );
+  def(Bytecodes::_fast_lputfield      , ubcp|____|vfld|____, ltos, vtos, fast_storefield  ,  ltos        );
+  def(Bytecodes::_fast_sputfield      , ubcp|____|vfld|____, itos, vtos, fast_storefield  ,  itos        );
 
   def(Bytecodes::_fast_aload_0        , ____|____|____|____, vtos, atos, aload               ,  0           );
   def(Bytecodes::_fast_iaccess_0      , ubcp|____|____|____, vtos, itos, fast_xaccess        ,  itos        );

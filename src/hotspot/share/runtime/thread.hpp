@@ -1589,7 +1589,14 @@ class JavaThread: public Thread {
   static ByteSize callee_target_offset()         { return byte_offset_of(JavaThread, _callee_target); }
   static ByteSize vm_result_offset()             { return byte_offset_of(JavaThread, _vm_result); }
   static ByteSize vm_result_2_offset()           { return byte_offset_of(JavaThread, _vm_result_2); }
+  static ByteSize return_value_boolean_offset()  { return byte_offset_of(JavaThread, _return_value.z); }
+  static ByteSize return_value_byte_offset()     { return byte_offset_of(JavaThread, _return_value.b); }
+  static ByteSize return_value_char_offset()     { return byte_offset_of(JavaThread, _return_value.c); }
+  static ByteSize return_value_short_offset()    { return byte_offset_of(JavaThread, _return_value.s); }
   static ByteSize return_value_int_offset()      { return byte_offset_of(JavaThread, _return_value.i); }
+  static ByteSize return_value_long_offset()     { return byte_offset_of(JavaThread, _return_value.j); }
+  static ByteSize return_value_float_offset()    { return byte_offset_of(JavaThread, _return_value.f); }
+  static ByteSize return_value_double_offset()   { return byte_offset_of(JavaThread, _return_value.d); }
   static ByteSize return_buffered_value_offset() { return byte_offset_of(JavaThread, _return_buffered_value); }
   static ByteSize thread_state_offset()          { return byte_offset_of(JavaThread, _thread_state); }
   static ByteSize saved_exception_pc_offset()    { return byte_offset_of(JavaThread, _saved_exception_pc); }

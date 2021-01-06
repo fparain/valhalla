@@ -585,6 +585,8 @@ class MacroAssembler: public Assembler {
   // For field "index" within "klass", return inline_klass ...
   void get_inline_type_field_klass(Register klass, Register index, Register inline_klass);
 
+  void get_field_holder_and_local_index(Register cache, Register index, Register holder, Register lindex);
+
   // interface method calling
   void lookup_interface_method(Register recv_klass,
                                Register intf_klass,

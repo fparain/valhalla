@@ -312,7 +312,9 @@ class TemplateTable: AllStatic {
 
   static void fast_xaccess(TosState state);
   static void fast_accessfield(TosState state);
+  static void fast_accessfield_old(TosState state);
   static void fast_storefield(TosState state);
+  static void fast_storefield_old(TosState state);
 
   static void _breakpoint();
 

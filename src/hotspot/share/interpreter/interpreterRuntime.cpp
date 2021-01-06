@@ -966,7 +966,8 @@ void InterpreterRuntime::resolve_get_put(JavaThread* thread, Bytecodes::Code byt
     }
     assert(gidx < vfia->length(), "Otherwise it means the field has not be found");
     // Use virtual fields for some fields but not for all to test code having to handle both
-    if (info.field_type() == T_INT && !is_static && (offset%16 == 0)) {
+    if (!is_static && (offset%16 == 0)
+        && (vfia->adr_at(gidx)->basic_type() >= T_BOOLEAN && vfia->adr_at(gidx)->basic_type() <= T_LONG)) {
       offset = gidx;
       is_virtual_field = true;
     } else {
@@ -1064,6 +1065,19 @@ JRT_ENTRY(void, InterpreterRuntime::put_virtual_field_value(JavaThread* thread, 
       break;
     case T_DOUBLE:
       obj_h()->double_field_put(vfi->offset(), thread->return_value().d);
+      break;
+    case T_OBJECT:
+      obj_h()->obj_field_put(vfi->offset(), thread->vm_result());
+      thread->set_vm_result(NULL);
+      break;
+    case T_INLINE_TYPE:
+      {
+        fatal("Should not reach here yet");
+        InstanceKlass* holder = InstanceKlass::cast(vfi->holder());
+        assert(!holder->field_is_inlined(vfi->local_index()), "Inlined fields not supported yet");
+        obj_h()->obj_field_put(vfi->offset(), thread->vm_result());
+        thread->set_vm_result(NULL);
+      }
       break;
     default:
       fatal("Should not reach here, not supported yet");

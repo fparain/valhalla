@@ -3836,6 +3836,14 @@ void MacroAssembler::get_inline_type_field_klass(Register klass, Register index,
   movptr(inline_klass, Address(inline_klass, index, Address::times_ptr));
 }
 
+void MacroAssembler::get_field_holder_and_local_index(Register cache, Register index, Register holder, Register lindex) {
+  movl(lindex, Address(cache, index, Address::times_ptr,
+			 in_bytes(ConstantPoolCache::base_offset() + ConstantPoolCacheEntry::flags_offset())));
+  andl(lindex, ConstantPoolCacheEntry::field_index_mask);
+  movptr(holder, Address(cache, index, Address::times_ptr,
+         in_bytes(ConstantPoolCache::base_offset() + ConstantPoolCacheEntry::f1_offset())));
+}
+
 void MacroAssembler::get_default_value_oop(Register inline_klass, Register temp_reg, Register obj) {
 #ifdef ASSERT
   {

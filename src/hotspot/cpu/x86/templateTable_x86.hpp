@@ -42,6 +42,12 @@
   static void putfield_or_static_helper(int byte_no, bool is_static, RewriteControl rc,
                                         Register obj, Register off, Register flags, Register flags2);
   static void fast_storefield_helper(Address field, Register obj, Register flags);
+  static void write_nonvirtual_field(Register obj, Register offset, Register value, Register flags);
+  static void write_virtual_field(Register obj, Register index, Register value, Register flags);
+  static void access_nonvirtual_field(Register cache, Register index, Register offset, Address field);
+  static void access_virtual_field_fast(Register object, Register index);
+  static void access_virtual_field(BasicType bt, Register flags, Register obj, Register off, Register val, DecoratorSet ds = DECORATORS_NONE);
+  static void store_virtual_field(BasicType bt, Register flags, Register obj, Register off, Register val, DecoratorSet ds = DECORATORS_NONE);
 
   static void invoke_is_substitutable(Register aobj, Register bobj, Label& is_subst, Label& not_subst);
 
