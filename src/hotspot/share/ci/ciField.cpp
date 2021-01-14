@@ -128,6 +128,7 @@ ciField::ciField(ciInstanceKlass* klass, int index) :
     // code (the expected behavior in this case).
     _holder = ciEnv::current(THREAD)->Object_klass();
     _offset = -1;
+    _virtual_index = -1;
     _is_constant = false;
     return;
   }
@@ -142,6 +143,7 @@ ciField::ciField(ciInstanceKlass* klass, int index) :
     // We need values for _holder, _offset,  and _is_constant,
     _holder = declared_holder;
     _offset = -1;
+    _virtual_index = -1;
     _is_constant = false;
     return;
   }
@@ -156,6 +158,7 @@ ciField::ciField(ciInstanceKlass* klass, int index) :
     // Field lookup failed.  Will be detected by will_link.
     _holder = declared_holder;
     _offset = -1;
+    _virtual_index = -1;
     _is_constant = false;
     return;
   }
@@ -172,6 +175,7 @@ ciField::ciField(ciInstanceKlass* klass, int index) :
   if (!can_access) {
     _holder = declared_holder;
     _offset = -1;
+    _virtual_index = -1;
     _is_constant = false;
     // It's possible the access check failed due to a nestmate access check
     // encountering an exception. We can't propagate the exception from here
@@ -285,8 +289,24 @@ void ciField::initialize_from(fieldDescriptor* fd) {
   _holder = CURRENT_ENV->get_instance_klass(field_holder);
   _is_flattened = fd->is_inlined();
 
-  // Check to see if the field is constant.
   Klass* k = _holder->get_Klass();
+
+  // Getting virtual index
+  if (!fd->access_flags().is_static()) {
+    InstanceKlass* ik = InstanceKlass::cast(k);
+    _virtual_index = -1;
+    ResourceMark rm;
+    Array<VirtualFieldInfo>* vfia = ik->virtual_fields();
+    for (int i = 0; i < vfia->length(); i++) {
+      if (vfia->adr_at(i)->offset() == _offset) {
+        _virtual_index = i;
+        break;
+      }
+    }
+    assert(_virtual_index != -1, "Failed to find virtual field index");
+  }
+
+  // Check to see if the field is constant.
   bool is_stable_field = FoldStableValues && is_stable();
   if ((is_final() && !has_initialized_final_update()) || is_stable_field) {
     if (is_static()) {

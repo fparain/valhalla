@@ -1584,6 +1584,17 @@ void LIRGenerator::do_CompareAndSwap(Intrinsic* x, ValueType* type) {
   set_result(x, result);
 }
 
+// FIXME -- I can't find any other way to pass an address to access_load_at().
+class TempResolvedAddress: public Instruction {
+ public:
+  TempResolvedAddress(ValueType* type, LIR_Opr addr) : Instruction(type) {
+    set_operand(addr);
+  }
+  virtual void input_values_do(ValueVisitor*) {}
+  virtual void visit(InstructionVisitor* v)   {}
+  virtual const char* name() const  { return "TempResolvedAddress"; }
+};
+
 // Comment copied form templateTable_i486.cpp
 // ----------------------------------------------------------------------------
 // Volatile variables demand their effects be made known to all CPU's in
@@ -1680,20 +1691,29 @@ void LIRGenerator::do_StoreField(StoreField* x) {
     decorators |= C1_NEEDS_PATCHING;
   }
 
-  access_store_at(decorators, field_type, object, LIR_OprFact::intConst(x->offset()),
-                  value.result(), info != NULL ? new CodeEmitInfo(info) : NULL, info);
-}
+  if (UseVirtualFields  && !x->is_static() && !needs_patching && !x->cannot_be_virtual()
+      && field_type >= T_BOOLEAN && field_type <= T_LONG) {  // temporary hack to test virtual field implementation
 
-// FIXME -- I can't find any other way to pass an address to access_load_at().
-class TempResolvedAddress: public Instruction {
- public:
-  TempResolvedAddress(ValueType* type, LIR_Opr addr) : Instruction(type) {
-    set_operand(addr);
+    LIR_Opr loffset = load_offset_for_virtual_field(object, x->field());
+
+    // Computing field's real address
+    LIR_Opr field_op = new_pointer_register();
+    LIR_Address* field_address = new LIR_Address(object.result(), loffset, T_METADATA);
+    __ leal(LIR_OprFact::address(field_address), field_op);
+
+    // Performing field access
+    TempResolvedAddress* field_resolved_addr = new TempResolvedAddress(as_ValueType(field_type), field_op);
+    LIRItem field_item(field_resolved_addr, this);
+    // access_load_at(decorators, field_type,
+    //                field_item, LIR_OprFact::longConst(0), result,
+    //                NULL, NULL);
+    access_store_at(decorators, field_type, field_item, LIR_OprFact::longConst(0),
+                  value.result(), info != NULL ? new CodeEmitInfo(info) : NULL, info);
+  } else {
+    access_store_at(decorators, field_type, object, LIR_OprFact::intConst(x->offset()),
+                  value.result(), info != NULL ? new CodeEmitInfo(info) : NULL, info);
   }
-  virtual void input_values_do(ValueVisitor*) {}
-  virtual void visit(InstructionVisitor* v)   {}
-  virtual const char* name() const  { return "TempResolvedAddress"; }
-};
+}
 
 LIR_Opr LIRGenerator::get_and_load_element_address(LIRItem& array, LIRItem& index) {
   ciType* array_type = array.value()->declared_type();
@@ -2023,6 +2043,34 @@ LIR_Opr LIRGenerator::access_atomic_xchg_at(DecoratorSet decorators, BasicType t
   }
 }
 
+LIR_Opr LIRGenerator::load_offset_for_virtual_field(LIRItem& object, ciField* field) {
+  // Getting the address of the virtual field info array
+  LIR_Opr klass = new_register(T_METADATA);
+  __ move(new LIR_Address(object.result(), oopDesc::klass_offset_in_bytes(), T_ADDRESS), klass, NULL);
+  LIR_Opr vfia = new_register(T_METADATA);
+  __ move(new LIR_Address(klass, in_bytes(InstanceKlass::virtual_fields_offset()), T_METADATA), vfia);
+
+  // Computing the offset of the virtual field info entry in the array
+  LIR_Opr index_op = new_register(T_INT);
+  int virtual_index = field->virtual_index();
+  __ move(LIR_OprFact::intConst(virtual_index), index_op);
+  __ mul(index_op, LIR_OprFact::intConst(sizeof(VirtualFieldInfo)), index_op); // Bad for performance to use a mul in this code path
+  __ add(index_op, LIR_OprFact::intConst(Array<VirtualFieldInfo>::base_offset_in_bytes()), index_op);
+
+  LIR_Opr lindex_op = new_register(T_LONG);
+  __ convert(Bytecodes::_i2l, index_op, lindex_op);
+
+  // Getting the field offset
+  LIR_Opr offset = new_register(T_INT);
+  LIR_Address* offset_address = new LIR_Address(vfia, lindex_op, in_bytes(VirtualFieldInfo::offset_offset()), T_INT);
+  __ move(LIR_OprFact::address(offset_address), offset);
+
+  LIR_Opr loffset = new_register(T_LONG);
+  __ convert(Bytecodes::_i2l, offset, loffset);
+  return loffset;
+}
+
+
 LIR_Opr LIRGenerator::access_atomic_add_at(DecoratorSet decorators, BasicType type,
                                            LIRItem& base, LIRItem& offset, LIRItem& value) {
   decorators |= ACCESS_READ;
@@ -2132,9 +2180,29 @@ void LIRGenerator::do_LoadField(LoadField* x) {
   }
 
   LIR_Opr result = rlock_result(x, field_type);
-  access_load_at(decorators, field_type,
-                 object, LIR_OprFact::intConst(x->offset()), result,
-                 info ? new CodeEmitInfo(info) : NULL, info);
+
+  if (UseVirtualFields  && !x->is_static() && !needs_patching && !x->cannot_be_virtual()
+      && field_type >= T_BOOLEAN && field_type <= T_LONG) {  // temporary hack to test virtual field implementation
+
+    LIR_Opr loffset = load_offset_for_virtual_field(object, x->field());
+
+    // Computing field's real address
+    LIR_Opr field_op = new_pointer_register();
+    LIR_Address* field_address = new LIR_Address(object.result(), loffset, T_METADATA);
+    __ leal(LIR_OprFact::address(field_address), field_op);
+
+    // Performing field access
+    TempResolvedAddress* field_resolved_addr = new TempResolvedAddress(as_ValueType(field_type), field_op);
+    LIRItem field_item(field_resolved_addr, this);
+    access_load_at(decorators, field_type,
+                   field_item, LIR_OprFact::longConst(0), result,
+                   NULL, NULL);
+
+  } else {
+    access_load_at(decorators, field_type,
+                   object, LIR_OprFact::intConst(x->offset()), result,
+                   info ? new CodeEmitInfo(info) : NULL, info);
+  }
 
   ciField* field = x->field();
   if (field->signature()->is_Q_signature()) {

@@ -1773,8 +1773,10 @@ void GraphBuilder::copy_inline_content(ciInlineKlass* vk, Value src, int src_off
     assert(!inner_field->is_flattened(), "the iteration over nested fields is handled by the loop itself");
     int off = inner_field->offset() - vk->first_field_offset();
     LoadField* load = new LoadField(src, src_off + off, inner_field, false, state_before, needs_patching);
+    load->set_cannot_be_virtual(true);
     Value replacement = append(load);
     StoreField* store = new StoreField(dest, dest_off + off, inner_field, replacement, false, state_before, needs_patching);
+    store->set_cannot_be_virtual(true);
     append(store);
   }
 }
@@ -1913,6 +1915,7 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
             load = new LoadField(pending_field_access()->obj(),
                                  pending_field_access()->offset() + offset - field->holder()->as_inline_klass()->first_field_offset(),
                                  field, false, state_before, needs_patching);
+            load->set_cannot_be_virtual(true);
             set_pending_field_access(NULL);
           } else if (has_pending_load_indexed()) {
             assert(!needs_patching, "Can't patch delayed field access");
@@ -2100,8 +2103,10 @@ void GraphBuilder::withfield(int field_index)
         } else {
           // Only load those fields who are not modified
           LoadField* load = new LoadField(obj, off, field, false, state_before, needs_patching);
+          load->set_cannot_be_virtual(true);
           Value replacement = append(load);
           StoreField* store = new StoreField(new_instance, off, field, replacement, false, state_before, needs_patching);
+          store->set_cannot_be_virtual(true);
           append(store);
         }
       }

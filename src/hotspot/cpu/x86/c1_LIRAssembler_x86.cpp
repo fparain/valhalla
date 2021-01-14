@@ -1283,6 +1283,9 @@ void LIR_Assembler::mem2reg(LIR_Opr src, LIR_Opr dest, BasicType type, LIR_Patch
       }
       break;
 
+    case T_METADATA:
+      __ movptr(dest->as_register(), from_addr);
+      break;
     case T_ADDRESS:
       if (UseCompressedClassPointers && addr->disp() == oopDesc::klass_offset_in_bytes()) {
         __ movl(dest->as_register(), from_addr);
@@ -2282,6 +2285,10 @@ void LIR_Assembler::arith_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
         }
         case lir_sub: {
           __ decrementl(lreg, c);
+          break;
+        }
+        case lir_mul: {
+          __ imull(lreg, lreg, c);
           break;
         }
         default: ShouldNotReachHere();

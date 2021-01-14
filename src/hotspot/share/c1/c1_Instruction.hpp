@@ -868,6 +868,8 @@ BASE(AccessField, Instruction)
 
 
 LEAF(LoadField, AccessField)
+ private:
+  bool _cannot_be_virtual;
  public:
   // creation
   LoadField(Value obj, int offset, ciField* field, bool is_static,
@@ -876,9 +878,12 @@ LEAF(LoadField, AccessField)
   : AccessField(obj, offset, field, is_static, state_before, needs_patching)
   {
     set_null_free(field->signature()->is_Q_signature());
+    _cannot_be_virtual = false;
   }
 
   ciType* declared_type() const;
+  bool cannot_be_virtual() const { return _cannot_be_virtual; }
+  void set_cannot_be_virtual(bool b) { _cannot_be_virtual = b; }
 
   // generic; cannot be eliminated if needs patching or if volatile.
   HASHING3(LoadField, !needs_patching() && !field()->is_volatile(), obj()->subst(), offset(), declared_type())
@@ -888,6 +893,7 @@ LEAF(LoadField, AccessField)
 LEAF(StoreField, AccessField)
  private:
   Value _value;
+  bool _cannot_be_virtual;
 
  public:
   // creation
@@ -897,6 +903,8 @@ LEAF(StoreField, AccessField)
   // accessors
   Value value() const                            { return _value; }
   bool needs_write_barrier() const               { return check_flag(NeedsWriteBarrierFlag); }
+  bool cannot_be_virtual() const                 { return _cannot_be_virtual; }
+  void set_cannot_be_virtual(bool b)             { _cannot_be_virtual = b; }
 
   // generic
   virtual void input_values_do(ValueVisitor* f)   { AccessField::input_values_do(f); f->visit(&_value); }

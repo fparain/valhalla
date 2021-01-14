@@ -38,7 +38,7 @@ class VirtualFieldInfo : public MetaspaceObj {
 protected:
   Klass* _holder;
   int _local_index;
-  int _offset;
+  jint _offset;
   BasicType _type;
   Klass* _type_klass;
 

@@ -48,6 +48,7 @@ private:
   ciSymbol*        _signature;
   ciType*          _type;
   int              _offset;
+  int              _virtual_index;
   bool             _is_constant;
   bool             _is_flattened;
   ciMethod*        _known_to_link_with_put;
@@ -118,6 +119,10 @@ public:
   // Same question, explicit units.  (Fields are aligned to the byte level.)
   int offset_in_bytes() const {
     return offset();
+  }
+
+  int virtual_index() const {
+    return _virtual_index;
   }
 
   // Is this field shared?

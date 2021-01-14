@@ -46,10 +46,11 @@ class FieldInfo {
   // Field info extracted from the class file and stored
   // as an array of 6 shorts.
 
-#define FIELDINFO_TAG_SIZE             3
+#define FIELDINFO_TAG_SIZE             4
 #define FIELDINFO_TAG_OFFSET           1 << 0
 #define FIELDINFO_TAG_CONTENDED        1 << 1
 #define FIELDINFO_TAG_INLINED          1 << 2
+#define FIELDINFO_TAG_VIRTUAL          1 << 3
 
   // Packed field has the tag, and can be either of:
   //    hi bits <--------------------------- lo bits
@@ -161,6 +162,18 @@ class FieldInfo {
 
   bool is_inlined() {
     return (_shorts[low_packed_offset] & FIELDINFO_TAG_INLINED) != 0;
+  }
+
+  void set_virtual(bool b) {
+    if (b) {
+      _shorts[low_packed_offset] |= FIELDINFO_TAG_VIRTUAL;
+    } else {
+      _shorts[low_packed_offset] &= ~FIELDINFO_TAG_VIRTUAL;
+    }
+  }
+
+  bool is_virtual() {
+    return (_shorts[low_packed_offset] & FIELDINFO_TAG_VIRTUAL) != 0;
   }
 
   void set_contended_group(u2 val) {
