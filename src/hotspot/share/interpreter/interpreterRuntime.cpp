@@ -966,8 +966,9 @@ void InterpreterRuntime::resolve_get_put(JavaThread* thread, Bytecodes::Code byt
     }
     assert(gidx < vfia->length(), "Otherwise it means the field has not be found");
     // Use virtual fields for some fields but not for all to test code having to handle both
+    BasicType bt = Signature::basic_type(InstanceKlass::cast(vfia->adr_at(gidx)->holder())->field_signature(vfia->adr_at(gidx)->local_index()));
     if (!is_static && (offset%16 == 0)
-        && (vfia->adr_at(gidx)->basic_type() >= T_BOOLEAN && vfia->adr_at(gidx)->basic_type() <= T_LONG)) {
+        && (bt >= T_BOOLEAN && bt <= T_LONG)) {
       offset = gidx;
       is_virtual_field = true;
     } else {
@@ -998,9 +999,9 @@ JRT_ENTRY(void, InterpreterRuntime::get_virtual_field_value(JavaThread* thread, 
   Handle obj_h(THREAD, obj); // Do we need that?
 
   VirtualFieldInfo *vfi = ik->virtual_fields()->adr_at(gindex);
-
   assert(vfi != NULL, "Not found");
-  switch(vfi->basic_type()) {
+  BasicType bt = Signature::basic_type(InstanceKlass::cast(vfi->holder())->field_signature(vfi->local_index()));
+  switch(bt) {
     case T_BOOLEAN:
       thread->set_return_value_boolean(obj_h()->bool_field(vfi->offset()));
       break;
@@ -1039,9 +1040,9 @@ JRT_ENTRY(void, InterpreterRuntime::put_virtual_field_value(JavaThread* thread, 
   Handle obj_h(THREAD, obj); // Do we need that?
 
   VirtualFieldInfo *vfi = ik->virtual_fields()->adr_at(gindex);
-
   assert(vfi != NULL, "Not found");
-  switch(vfi->basic_type()) {
+  BasicType bt = Signature::basic_type(InstanceKlass::cast(vfi->holder())->field_signature(vfi->local_index()));
+  switch(bt) {
     case T_BOOLEAN:
       obj_h()->bool_field_put(vfi->offset(), thread->return_value().z);
       break;

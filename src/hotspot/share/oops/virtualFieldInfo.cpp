@@ -23,9 +23,10 @@
  */
 
 #include "logging/log.hpp"
-#include "oops/klass.hpp"
+#include "oops/instanceKlass.hpp"
 #include "oops/symbol.hpp"
 #include "oops/virtualFieldInfo.hpp"
+#include "runtime/signature.hpp"
 #include "memory/resourceArea.hpp"
 
   // Klass* _holder;
@@ -38,8 +39,9 @@ void VirtualFieldInfo::print_value_on(outputStream* st) const {
   st->print_cr("  holder: %s", holder() == NULL ?  "NULL" : holder()->name()->as_C_string());
   st->print_cr("  local index: %d", local_index());
   st->print_cr("  offset: %d", offset());
-  st->print_cr("  type: %s", type2name(basic_type()));
-  if (is_reference_type(basic_type())) {
+  BasicType bt = Signature::basic_type(InstanceKlass::cast(holder())->field_signature(local_index()));
+  st->print_cr("  type: %s", type2name(bt));
+  if (is_reference_type(bt)) {
     st->print_cr("  type_klass: %s", type_klass() == NULL ? "NULL" : type_klass()->name()->as_C_string());
   }
   st->print_cr("  ------------------");

@@ -5926,8 +5926,6 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
       vfi->set_holder(k);
       vfi->set_local_index(fs.index());
       vfi->set_offset(fs.offset());
-      BasicType bt = fs.field_descriptor().field_type();
-      vfi->set_basic_type(bt);
       // if (is_reference_type(bt)) { // Handling of _type_klass is expensive, should be done lazely
       //   Klass* tk = NULL;
       //   if (k != ik) {

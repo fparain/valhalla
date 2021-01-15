@@ -1704,9 +1704,6 @@ void LIRGenerator::do_StoreField(StoreField* x) {
     // Performing field access
     TempResolvedAddress* field_resolved_addr = new TempResolvedAddress(as_ValueType(field_type), field_op);
     LIRItem field_item(field_resolved_addr, this);
-    // access_load_at(decorators, field_type,
-    //                field_item, LIR_OprFact::longConst(0), result,
-    //                NULL, NULL);
     access_store_at(decorators, field_type, field_item, LIR_OprFact::longConst(0),
                   value.result(), info != NULL ? new CodeEmitInfo(info) : NULL, info);
   } else {
@@ -2050,19 +2047,13 @@ LIR_Opr LIRGenerator::load_offset_for_virtual_field(LIRItem& object, ciField* fi
   LIR_Opr vfia = new_register(T_METADATA);
   __ move(new LIR_Address(klass, in_bytes(InstanceKlass::virtual_fields_offset()), T_METADATA), vfia);
 
-  // Computing the offset of the virtual field info entry in the array
-  LIR_Opr index_op = new_register(T_INT);
-  int virtual_index = field->virtual_index();
-  __ move(LIR_OprFact::intConst(virtual_index), index_op);
-  __ mul(index_op, LIR_OprFact::intConst(sizeof(VirtualFieldInfo)), index_op); // Bad for performance to use a mul in this code path
-  __ add(index_op, LIR_OprFact::intConst(Array<VirtualFieldInfo>::base_offset_in_bytes()), index_op);
-
-  LIR_Opr lindex_op = new_register(T_LONG);
-  __ convert(Bytecodes::_i2l, index_op, lindex_op);
-
-  // Getting the field offset
+  // Read field's offset
+  int offset_offset = Array<VirtualFieldInfo>::base_offset_in_bytes() + field->virtual_index() * sizeof(VirtualFieldInfo)
+                      + in_bytes(VirtualFieldInfo::offset_offset());
+  LIR_Opr offset_opr = new_register(T_LONG);
+  __ move(LIR_OprFact::longConst(offset_offset), offset_opr);
+  LIR_Address* offset_address = new LIR_Address(vfia, offset_opr, T_INT);
   LIR_Opr offset = new_register(T_INT);
-  LIR_Address* offset_address = new LIR_Address(vfia, lindex_op, in_bytes(VirtualFieldInfo::offset_offset()), T_INT);
   __ move(LIR_OprFact::address(offset_address), offset);
 
   LIR_Opr loffset = new_register(T_LONG);

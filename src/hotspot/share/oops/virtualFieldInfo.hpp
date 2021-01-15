@@ -37,18 +37,16 @@ class VirtualFieldInfo : public MetaspaceObj {
   friend class InstanceKlass;
 protected:
   Klass* _holder;
+  Klass* _type_klass;
   int _local_index;
   jint _offset;
-  BasicType _type;
-  Klass* _type_klass;
 
  public:
   VirtualFieldInfo():
     _holder(NULL),
+    _type_klass(NULL),
     _local_index(-1),
-    _offset(-1),
-    _type(T_ILLEGAL),
-    _type_klass(NULL) { }
+    _offset(-1) { }
 
   Klass* holder() const { return _holder; }
   void set_holder(Klass* k) { _holder = k; }
@@ -58,9 +56,6 @@ protected:
 
   int offset() const { return _offset; }
   void set_offset(int o) { _offset = o; }
-
-  BasicType basic_type() const { return _type; }
-  void set_basic_type(BasicType bt) { _type = bt; }
 
   Klass* type_klass() const { return _type_klass; }
   void set_type_klass(Klass* k) { _type_klass = k; }
