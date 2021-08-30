@@ -49,7 +49,7 @@
 // _indices   [ b2 | b1 |  index  ]  index = constant_pool_index
 // _f1        [  entry specific   ]  metadata ptr (method or klass)
 // _f2        [  entry specific   ]  vtable or res_ref index, or vfinal method ptr
-// _flags     [tos|0|F=1|0|I|i|f|v|0 |0000|field_index] (for field entries)
+// _flags     [tos|0|F=1|0|I|i|f|v|n |0000|field_index] (for field entries)
 // bit length [ 4 |1| 1 |1|1|1|1|1|1 |1     |-3-|----16-----]
 // _flags     [tos|0|F=0|S|A|I|f|0|vf|indy_rf|000|00000|psize] (for method entries)
 // bit length [ 4 |1| 1 |1|1|1|1|1|1 |-4--|--8--|--8--]
@@ -189,6 +189,7 @@ class ConstantPoolCacheEntry {
     is_inlined_shift           = 23,  // (i) is the field inlined?
     is_final_shift             = 22,  // (f) is the field or method final?
     is_volatile_shift          = 21,  // (v) is the field volatile?
+    is_nullable_flattenable_shift = 20,  // (n) is the field nullable flattenable?
     is_vfinal_shift            = 20,  // (vf) did the call resolve to a final method?
     indy_resolution_failed_shift= 19, // (indy_rf) did call site specifier resolution fail ?
     // low order bits give field index (for FieldInfo) or method parameter size:
@@ -227,7 +228,8 @@ class ConstantPoolCacheEntry {
     bool            is_final,                    // the field is final
     bool            is_volatile,                 // the field is volatile
     bool            is_inlined,                  // the field is inlined
-    bool            is_null_free_inline_type     // the field is an inline type (must never be null)
+    bool            is_null_free_inline_type,    // the field is an inline type (must never be null)
+    bool            is_nullable_flattenable      // the field is nullable flattenable
   );
 
  private:
@@ -349,6 +351,7 @@ class ConstantPoolCacheEntry {
   int  field_index() const                       { assert(is_field_entry(),  ""); return (_flags & field_index_mask); }
   int  parameter_size() const                    { assert(is_method_entry(), ""); return (_flags & parameter_size_mask); }
   bool is_volatile() const                       { return (_flags & (1 << is_volatile_shift))       != 0; }
+  bool is_nullable_flattenable() const           { return (_flags & (1 << is_nullable_flattenable_shift)) != 0; }
   bool is_final() const                          { return (_flags & (1 << is_final_shift))          != 0; }
   bool is_inlined() const                        { return  (_flags & (1 << is_inlined_shift))       != 0; }
   bool is_forced_virtual() const                 { return (_flags & (1 << is_forced_virtual_shift)) != 0; }

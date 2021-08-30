@@ -2302,6 +2302,7 @@
   /********************************/                                      \
                                                                           \
   declare_constant(ConstantPoolCacheEntry::is_volatile_shift)             \
+  declare_constant(ConstantPoolCacheEntry::is_nullable_flattenable_shift) \
   declare_constant(ConstantPoolCacheEntry::is_final_shift)                \
   declare_constant(ConstantPoolCacheEntry::is_forced_virtual_shift)       \
   declare_constant(ConstantPoolCacheEntry::is_vfinal_shift)               \

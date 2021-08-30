@@ -210,6 +210,7 @@ class ClassFileParser {
   bool _has_injected_identityObject;
   bool _implements_primitiveObject;
   bool _has_injected_primitiveObject;
+  bool _is_nullable_flattenable;
 
   // precomputed flags
   bool _has_finalizer;

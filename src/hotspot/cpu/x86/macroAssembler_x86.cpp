@@ -2783,6 +2783,15 @@ void MacroAssembler::test_field_is_inlined(Register flags, Register temp_reg, La
   jcc(Assembler::notZero, is_inlined);
 }
 
+void MacroAssembler::test_field_is_nullable_flattenable(Register flags, Register temp_reg, Label& is_nullable_flattenable) {
+  movl(temp_reg, flags);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_nullable_flattenable_shift);
+  andl(temp_reg, 0x1);
+  testl(temp_reg, temp_reg);
+  jcc(Assembler::notZero, is_nullable_flattenable);
+}
+
+
 void MacroAssembler::test_oop_prototype_bit(Register oop, Register temp_reg, int32_t test_bit, bool jmp_set, Label& jmp_label) {
   Label test_mark_word;
   // load mark word

@@ -927,6 +927,18 @@ void ClassFileParser::parse_interfaces(const ClassFileStream* stream,
         // needs field parsing, delay unitl post_process_parse_stream()
         _implements_primitiveObject = true;
       }
+      if (ik->name() == vmSymbols::java_lang_NullableFlattenable()) {
+        if (!is_inline_type()) {
+          ResourceMark rm(THREAD);
+          Exceptions::fthrow(
+            THREAD_AND_LOCATION,
+            vmSymbols::java_lang_IncompatibleClassChangeError(),
+            "Identity type %s attempts to implement interface java.lang.NullableFlattenable",
+            _class_name->as_klass_external_name());
+          return;
+        }
+        _is_nullable_flattenable = true;
+      }
       _temp_local_interfaces->append(ik);
     }
 
@@ -1547,7 +1559,7 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
   // two more slots are required for inline classes:
   // one for the static field with a reference to the pre-allocated default value
   // one for the field the JVM injects when detecting an empty inline class
-  const int total_fields = length + num_injected + (is_inline_type ? 2 : 0);
+  const int total_fields = length + num_injected + (is_inline_type ? 2 : 0) + (_is_nullable_flattenable ?  1 : 0);
 
   // The field array starts with tuples of shorts
   // [access, name index, sig index, initial value index, byte offset].
@@ -1730,6 +1742,17 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
         (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(byte_signature)),
         0);
     const BasicType type = Signature::basic_type(vmSymbols::byte_signature());
+    fac->update(false, type, false);
+    index++;
+  }
+
+  if (_is_nullable_flattenable) {
+    FieldInfo* const field = FieldInfo::from_field_array(fa, index);
+    field->initialize(JVM_ACC_FIELD_INTERNAL,
+        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(null_pivot_name)),
+        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(bool_signature)),
+        0);
+    const BasicType type = Signature::basic_type(vmSymbols::bool_signature());
     fac->update(false, type, false);
     index++;
   }
@@ -5589,6 +5612,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
     ik->set_has_injected_primitiveObject();
   }
 
+  if (_is_nullable_flattenable) {
+    ik->set_is_nullable_flattenable();
+  }
+
   assert(_fac != NULL, "invariant");
   ik->set_static_oop_field_count(_fac->count[STATIC_OOP] + _fac->count[STATIC_INLINE]);
 
@@ -5752,7 +5779,8 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
 
   bool all_fields_empty = true;
   int nfields = ik->java_fields_count();
-  if (ik->is_inline_klass()) nfields++;
+  if (ik->is_inline_klass()) nfields++;             // real number of fields should managed in a cleaner way
+  if (ik->is_nullable_flattenable()) nfields++;     //
   for (int i = 0; i < nfields; i++) {
     if (((ik->field_access_flags(i) & JVM_ACC_STATIC) == 0)) {
       if (ik->field_is_null_free_inline_type(i)) {
@@ -5772,6 +5800,9 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
       }
     } else if (is_inline_type() && ((ik->field_access_flags(i) & JVM_ACC_FIELD_INTERNAL) != 0)) {
       InlineKlass::cast(ik)->set_default_value_offset(ik->field_offset(i));
+    }
+    if (ik->field_name(i) == vmSymbols::null_pivot_name()) {
+      InlineKlass::cast(ik)->set_null_pivot_offset(ik->field_offset(i));
     }
   }
 
@@ -5939,6 +5970,7 @@ ClassFileParser::ClassFileParser(ClassFileStream* stream,
   _has_injected_identityObject(false),
   _implements_primitiveObject(false),
   _has_injected_primitiveObject(false),
+  _is_nullable_flattenable(false),
   _has_finalizer(false),
   _has_empty_finalizer(false),
   _has_vanilla_constructor(false),

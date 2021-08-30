@@ -408,6 +408,33 @@ JRT_ENTRY(void, InterpreterRuntime::read_inlined_field(JavaThread* current, oopD
   current->set_vm_result(res);
 JRT_END
 
+JRT_ENTRY(void, InterpreterRuntime::read_nullable_flattenable_field(JavaThread* current, oopDesc* obj, int index, Klass* field_holder))
+  Handle obj_h(THREAD, obj);
+
+  assert(oopDesc::is_oop(obj), "Sanity check");
+
+  assert(field_holder->is_instance_klass(), "Sanity check");
+  InstanceKlass* klass = InstanceKlass::cast(field_holder);
+
+  assert(klass->field_is_inlined(index), "Sanity check");
+
+  InlineKlass* field_vklass = InlineKlass::cast(klass->get_inline_type_field_klass(index));
+  assert(field_vklass->is_initialized(), "Must be initialized at this point");
+  assert(field_vklass->is_nullable_flattenable(), "Must be");
+
+  int pivot_offset = field_vklass->null_pivot_offset();
+  jboolean is_valid = obj_h()->bool_field(pivot_offset);
+
+  oop res;
+  if (is_valid) {
+    oop res = field_vklass->read_inlined_field(obj_h(), klass->field_offset(index), CHECK);
+  } else {
+    res = NULL;
+  }
+
+  current->set_vm_result(res);
+JRT_END
+
 JRT_ENTRY(void, InterpreterRuntime::newarray(JavaThread* current, BasicType type, jint size))
   oop obj = oopFactory::new_typeArray(type, size, CHECK);
   current->set_vm_result(obj);
@@ -922,6 +949,17 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     }
   }
 
+
+  // Big issue here: in case of circular references in static fields, get_inline_type_field_klass()
+  // might not be sufficiently initialized yet. A slow path is needed for put/getstatic (fetching
+  // the class from the system dictionary).
+  // Question: could error conditions occur?
+  bool is_nullable_flattenable = false;
+  if (info.signature()->is_Q_signature() && !info.access_flags().is_static()) {
+    InstanceKlass* ik = InlineKlass::cast(info.field_holder()->get_inline_type_field_klass(info.index()));
+    is_nullable_flattenable = ik->is_nullable_flattenable();
+  }
+
   cp_cache_entry->set_field(
     get_code,
     put_code,
@@ -932,8 +970,10 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     info.access_flags().is_final(),
     info.access_flags().is_volatile(),
     info.is_inlined(),
-    info.signature()->is_Q_signature() && info.is_inline_type()
+    info.signature()->is_Q_signature() && info.is_inline_type(),
+    is_nullable_flattenable
   );
+
 }
 
 

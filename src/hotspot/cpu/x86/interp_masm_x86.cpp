@@ -1235,6 +1235,13 @@ void InterpreterMacroAssembler::allocate_instance(Register klass, Register new_o
   }
 }
 
+void InterpreterMacroAssembler::read_nullable_flattenable_field(Register holder_klass,
+                            Register field_index, Register field_offset,
+                            Register obj) {
+
+  call_VM(obj, CAST_FROM_FN_PTR(address, InterpreterRuntime::read_nullable_flattenable_field),
+          obj, field_index, holder_klass);
+}
 
 void InterpreterMacroAssembler::read_inlined_field(Register holder_klass,
                                                      Register field_index, Register field_offset,

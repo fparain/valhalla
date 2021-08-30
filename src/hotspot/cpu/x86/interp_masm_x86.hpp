@@ -247,6 +247,10 @@ class InterpreterMacroAssembler: public MacroAssembler {
                             Register field_index, Register field_offset,
                             Register obj = rax);
 
+  void read_nullable_flattenable_field(Register holder_klass,
+                            Register field_index, Register field_offset,
+                            Register obj = rax);
+
   // Allocate value buffer in "obj" and read in flattened element at the given index
   // NOTES:
   //   - Return via "obj" must be rax

@@ -139,6 +139,7 @@ class InlineKlassFixedBlock {
   address* _pack_handler_jobject;
   address* _unpack_handler;
   int* _default_value_offset;
+  int* _null_pivot_offset;
   ArrayKlass** _null_free_inline_array_klasses;
   int _alignment;
   int _first_field_offset;
@@ -286,7 +287,8 @@ class InstanceKlass: public Klass {
     _misc_invalid_inline_super                = 1 << 20, // invalid super type for an inline type
     _misc_invalid_identity_super              = 1 << 21, // invalid super type for an identity type
     _misc_has_injected_identityObject         = 1 << 22, // IdentityObject has been injected by the JVM
-    _misc_has_injected_primitiveObject        = 1 << 23  // PrimitiveObject has been injected by the JVM
+    _misc_has_injected_primitiveObject        = 1 << 23, // PrimitiveObject has been injected by the JVM
+    _misc_is_nullable_flattenable             = 1 << 24  // Flattened form must support the null value
   };
 
   // (*) An inline type is considered empty if it contains no non-static fields or
@@ -491,6 +493,14 @@ class InstanceKlass: public Klass {
 
   void set_has_injected_primitiveObject() {
     _misc_flags |= _misc_has_injected_primitiveObject;
+  }
+
+  bool is_nullable_flattenable() const {
+    return (_misc_flags & _misc_is_nullable_flattenable);
+  }
+
+  void set_is_nullable_flattenable() {
+    _misc_flags |= _misc_is_nullable_flattenable;
   }
 
   // field sizes

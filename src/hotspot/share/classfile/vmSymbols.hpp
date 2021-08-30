@@ -84,6 +84,7 @@
   template(java_lang_Integer_IntegerCache,            "java/lang/Integer$IntegerCache")           \
   template(java_lang_Long,                            "java/lang/Long")                           \
   template(java_lang_Long_LongCache,                  "java/lang/Long$LongCache")                 \
+  template(java_lang_NullableFlattenable,             "java/lang/NullableFlattenable")            \
                                                                                                   \
   template(jdk_internal_vm_vector_VectorSupport,      "jdk/internal/vm/vector/VectorSupport")               \
   template(jdk_internal_vm_vector_VectorPayload,      "jdk/internal/vm/vector/VectorSupport$VectorPayload") \
@@ -483,6 +484,7 @@
   template(init_lock_name,                            "<init_lock>")                              \
   template(default_value_name,                        ".default")                                 \
   template(empty_marker_name,                         ".empty")                                   \
+  template(null_pivot_name,                           ".null_pivot")                              \
   template(address_size_name,                         "ADDRESS_SIZE0")                            \
   template(page_size_name,                            "PAGE_SIZE")                                \
   template(big_endian_name,                           "BIG_ENDIAN")                               \

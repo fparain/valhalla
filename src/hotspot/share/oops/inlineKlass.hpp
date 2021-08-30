@@ -75,6 +75,11 @@ class InlineKlass: public InstanceKlass {
     return ((address)_adr_inlineklass_fixed_block) + in_bytes(default_value_offset_offset());
   }
 
+  address adr_null_pivot_offset() const {
+    assert(_adr_inlineklass_fixed_block != NULL, "Should have been initialized");
+    return ((address)_adr_inlineklass_fixed_block) + in_bytes(null_pivot_offset_offset());
+  }
+
   ArrayKlass* volatile* adr_null_free_inline_array_klasses() const {
     assert(_adr_inlineklass_fixed_block != NULL, "Should have been initialized");
     return (ArrayKlass* volatile*) ((address)_adr_inlineklass_fixed_block) + in_bytes(byte_offset_of(InlineKlassFixedBlock, _null_free_inline_array_klasses));
@@ -259,6 +264,10 @@ class InlineKlass: public InstanceKlass {
     return byte_offset_of(InlineKlassFixedBlock, _default_value_offset);
   }
 
+  static ByteSize null_pivot_offset_offset() {
+    return byte_offset_of(InlineKlassFixedBlock, _null_pivot_offset);
+  }
+
   static ByteSize first_field_offset_offset() {
     return byte_offset_of(InlineKlassFixedBlock, _first_field_offset);
   }
@@ -267,7 +276,7 @@ class InlineKlass: public InstanceKlass {
     *((int*)adr_default_value_offset()) = offset;
   }
 
-  int default_value_offset() {
+  int default_value_offset() const {
     int offset = *((int*)adr_default_value_offset());
     assert(offset != 0, "must not be called if not initialized");
     return offset;
@@ -280,6 +289,16 @@ class InlineKlass: public InstanceKlass {
   oop default_value();
   void deallocate_contents(ClassLoaderData* loader_data);
   static void cleanup(InlineKlass* ik) ;
+
+  void set_null_pivot_offset(int offset) {
+    *((int*)adr_null_pivot_offset()) = offset;
+  }
+
+  int null_pivot_offset() const {
+    int offset = *((int*)adr_null_pivot_offset());
+    assert(offset != 0, "must not be called if not initialized");
+    return offset;
+  }
 
   // Verification
   void verify_on(outputStream* st);
