@@ -1239,8 +1239,15 @@ void InterpreterMacroAssembler::read_nullable_flattenable_field(Register holder_
                             Register field_index, Register field_offset,
                             Register obj) {
 
-  call_VM(obj, CAST_FROM_FN_PTR(address, InterpreterRuntime::read_nullable_flattenable_field),
+  call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::read_nullable_flattenable_field),
           obj, field_index, holder_klass);
+}
+
+void InterpreterMacroAssembler::write_nullable_flattenable_field(Register receiver,
+                                        Register field_index,
+                                        Register value) {
+  call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::write_nullable_flattenable_field),
+          receiver, field_index, value);
 }
 
 void InterpreterMacroAssembler::read_inlined_field(Register holder_klass,

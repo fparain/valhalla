@@ -422,17 +422,52 @@ JRT_ENTRY(void, InterpreterRuntime::read_nullable_flattenable_field(JavaThread* 
   assert(field_vklass->is_initialized(), "Must be initialized at this point");
   assert(field_vklass->is_nullable_flattenable(), "Must be");
 
-  int pivot_offset = field_vklass->null_pivot_offset();
+  int pivot_offset = klass->field_offset(index) + field_vklass->null_pivot_offset() - field_vklass->first_field_offset();
   jboolean is_valid = obj_h()->bool_field(pivot_offset);
 
   oop res;
   if (is_valid) {
-    oop res = field_vklass->read_inlined_field(obj_h(), klass->field_offset(index), CHECK);
+    res = field_vklass->read_inlined_field(obj_h(), klass->field_offset(index), CHECK);
   } else {
     res = NULL;
   }
-
   current->set_vm_result(res);
+JRT_END
+
+JRT_ENTRY(void, InterpreterRuntime::write_nullable_flattenable_field(JavaThread* current, oopDesc* rcv, int index, oopDesc* value))
+  Handle rcv_h(THREAD, rcv);
+  Handle value_h(THREAD, value);
+
+  InstanceKlass* rcv_klass = InstanceKlass::cast(rcv_h()->klass());
+  int offset = rcv_klass->field_offset(index);
+
+  // Note: at this point, we don't know if the field is flattened or not
+  // the non-flattened case could be handled in assembly code in a later optimization of the code
+
+  if (value_h() == NULL) {
+    if (rcv_klass->field_is_inlined(index)) {
+      // writing null equivalent to a flattened field:
+      //  - set the pivot field to false
+      //  - overwrite the content of the flattened field with the content of the all zero default value
+      //    (would set all embedded references to null, preventing keeping alive objects that are not
+      //     reachable anymore by the application)
+      InlineKlass* field_ik = InlineKlass::cast(rcv_klass->get_inline_type_field_klass(index));
+      field_ik->inline_copy_oop_to_payload(field_ik->default_value(), ((char*)(oopDesc*)rcv_h()) + offset);
+      // line above sets all fields to zero, including the pivot field
+    } else {
+      // simple case, just write the null reference
+      rcv_h()->obj_field_put(offset, value_h());
+    }
+  } else {
+    if (rcv_klass->field_is_inlined(index)) {
+      InlineKlass* field_ik = InlineKlass::cast(rcv_klass->get_inline_type_field_klass(index));
+      field_ik->inline_copy_oop_to_payload(value_h(), ((char*)(oopDesc*)rcv_h()) + offset);  // do we need better encapsulation?
+      int pivot_offset = offset + field_ik->null_pivot_offset() - field_ik->first_field_offset();
+      rcv_h()->bool_field_put(pivot_offset, true);
+    } else {
+      rcv_h()->obj_field_put(offset, value_h());
+    }
+  }
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::newarray(JavaThread* current, BasicType type, jint size))

@@ -3425,21 +3425,29 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
         if (EnableValhalla) {
           // Implementation of the inline type semantic
           __ bind(is_inline_type);
-          __ null_check(rax);
-          __ test_field_is_inlined(flags2, rscratch1, is_inlined);
-          // field is not inlined
-          pop_and_check_object(obj);
-          // Store into the field
-          do_oop_store(_masm, field, rax);
-          __ jmp(rewrite_inline);
-          __ bind(is_inlined);
-          // field is inlined
-          pop_and_check_object(obj);
-          assert_different_registers(rax, rdx, obj, off);
-          __ load_klass(rdx, rax, rscratch1);
-          __ data_for_oop(rax, rax, rdx);
-          __ addptr(obj, off);
-          __ access_value_copy(IN_HEAP, rax, obj, rdx);
+          Label is_nullable_flattenable;
+          __ test_field_is_nullable_flattenable(flags2, rscratch1, is_nullable_flattenable);
+            __ null_check(rax);
+            __ test_field_is_inlined(flags2, rscratch1, is_inlined);
+            // field is not inlined
+            pop_and_check_object(obj);
+            // Store into the field
+            do_oop_store(_masm, field, rax);
+            __ jmp(rewrite_inline);
+            __ bind(is_inlined);
+            // field is inlined
+            pop_and_check_object(obj);
+            assert_different_registers(rax, rdx, obj, off);
+            __ load_klass(rdx, rax, rscratch1);
+            __ data_for_oop(rax, rax, rdx);
+            __ addptr(obj, off);
+            __ access_value_copy(IN_HEAP, rax, obj, rdx);
+            __ jmp (rewrite_inline);
+          __ bind(is_nullable_flattenable);
+            __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
+            pop_and_check_object(obj);
+            __ movptr(rbx, obj); // shuffling arguments because of the calling convention
+            __ write_nullable_flattenable_field(rbx, rdx, rax);
           __ bind(rewrite_inline);
           if (rc == may_rewrite) {
             patch_bytecode(Bytecodes::_fast_qputfield, bc, rbx, true, byte_no);
@@ -3692,18 +3700,24 @@ void TemplateTable::fast_storefield_helper(Address field, Register rax, Register
   switch (bytecode()) {
   case Bytecodes::_fast_qputfield:
     {
-      Label is_inlined, done;
-      __ null_check(rax);
-      __ test_field_is_inlined(flags, rscratch1, is_inlined);
-      // field is not inlined
-      do_oop_store(_masm, field, rax);
-      __ jmp(done);
-      __ bind(is_inlined);
-      // field is inlined
-      __ load_klass(rdx, rax, rscratch1);
-      __ data_for_oop(rax, rax, rdx);
-      __ lea(rcx, field);
-      __ access_value_copy(IN_HEAP, rax, rcx, rdx);
+      Label is_inlined, is_nullable_flattenable, done;
+      __ test_field_is_nullable_flattenable(flags, rscratch1, is_nullable_flattenable);
+        __ null_check(rax);
+        __ test_field_is_inlined(flags, rscratch1, is_inlined);
+          // field is not inlined
+          do_oop_store(_masm, field, rax);
+          __ jmp(done);
+        __ bind(is_inlined);
+          // field is inlined
+          __ load_klass(rdx, rax, rscratch1);
+          __ data_for_oop(rax, rax, rdx);
+          __ lea(rcx, field);
+          __ access_value_copy(IN_HEAP, rax, rcx, rdx);
+          __ jmp(done);
+        __ bind(is_nullable_flattenable);
+          __ andl(flags, ConstantPoolCacheEntry::field_index_mask);
+          __ movptr(rbx, rcx); // shuffling arguments because of the calling convention
+          __ write_nullable_flattenable_field(rbx, rdx, rax);
       __ bind(done);
     }
     break;
