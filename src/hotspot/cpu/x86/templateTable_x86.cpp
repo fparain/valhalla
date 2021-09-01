@@ -3000,22 +3000,24 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
           __ jmp(Done);
         // field is a null free inline type, must not return null even if uninitialized
         __ bind(is_null_free_inline_type);
-           __ testptr(rax, rax);
+          __ testptr(rax, rax);
           __ jcc(Assembler::zero, uninitialized);
             __ push(atos);
             __ jmp(Done);
           __ bind(uninitialized);
-            __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
   #ifdef _LP64
             Label slow_case, finish;
+            __ test_field_is_nullable_flattenable(flags2, rscratch1, finish); // if nullable flattenable: nothing to do, rax already contains null
             __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
             __ jcc(Assembler::notEqual, slow_case);
           __ get_default_value_oop(rcx, off, rax);
           __ jmp(finish);
           __ bind(slow_case);
   #endif // LP64
+            __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
             __ call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::uninitialized_static_inline_type_field),
                   obj, flags2);
+
   #ifdef _LP64
             __ bind(finish);
   #endif // _LP64
@@ -3400,11 +3402,12 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     } else {
       __ pop(atos);
       if (is_static) {
-        Label is_inline_type;
+        Label not_null_free;
         if (EnableValhalla) {
-          __ test_field_is_not_null_free_inline_type(flags2, rscratch1, is_inline_type);
+          __ test_field_is_not_null_free_inline_type(flags2, rscratch1, not_null_free);
+          __ test_field_is_nullable_flattenable(flags2, rscratch1, not_null_free);
           __ null_check(rax);
-          __ bind(is_inline_type);
+          __ bind(not_null_free);
         }
         do_oop_store(_masm, field, rax);
         __ jmp(Done);

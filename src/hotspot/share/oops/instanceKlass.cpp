@@ -1285,7 +1285,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
           set_inline_type_field_klass(fs.index(), klass);
         }
         InstanceKlass::cast(klass)->initialize(CHECK);
-        if (fs.access_flags().is_static()) {
+        if (fs.access_flags().is_static() && !InlineKlass::cast(klass)->is_nullable_flattenable()) {
           if (java_mirror()->obj_field(fs.offset()) == NULL) {
             java_mirror()->obj_field_put(fs.offset(), InlineKlass::cast(klass)->default_value());
           }

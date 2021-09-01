@@ -984,15 +984,22 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     }
   }
 
-
-  // Big issue here: in case of circular references in static fields, get_inline_type_field_klass()
-  // might not be sufficiently initialized yet. A slow path is needed for put/getstatic (fetching
-  // the class from the system dictionary).
-  // Question: could error conditions occur?
   bool is_nullable_flattenable = false;
-  if (info.signature()->is_Q_signature() && !info.access_flags().is_static()) {
-    InstanceKlass* ik = InlineKlass::cast(info.field_holder()->get_inline_type_field_klass(info.index()));
-    is_nullable_flattenable = ik->is_nullable_flattenable();
+  if (info.signature()->is_Q_signature()) {
+    Klass* k = info.field_holder()->get_inline_type_field_klass_or_null(info.index());
+    if (k == NULL) {
+      assert(info.access_flags().is_static(), "This should happen only with circular references in static fields");
+      // The inline_type_field array is not fully populated yet, but at this point the field type should have been loaded
+      // so ask the system dictionary.
+      JavaThread* THREAD = current; // For exception macros.
+      InstanceKlass* klass = info.field_holder();
+      k = SystemDictionary::resolve_or_null(klass->field_signature(info.index())->fundamental_name(THREAD),
+          Handle(THREAD, klass->class_loader()),
+          Handle(THREAD, klass->protection_domain()),
+          CHECK);
+      assert(k != NULL, "Must have been loaded at this point!");
+    }
+    is_nullable_flattenable = InstanceKlass::cast(k)->is_nullable_flattenable();
   }
 
   cp_cache_entry->set_field(
