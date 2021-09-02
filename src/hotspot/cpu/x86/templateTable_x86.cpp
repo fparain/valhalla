@@ -4450,10 +4450,11 @@ void TemplateTable::arraylength() {
 
 void TemplateTable::checkcast() {
   transition(atos, atos);
-  Label done, is_null, ok_is_subtype, quicked, resolved;
+  Label done, is_null, ok_is_subtype, quicked, resolved, slow_path;
   __ testptr(rax, rax); // object is in rax
   __ jcc(Assembler::zero, is_null);
 
+  __ bind(slow_path);
   // Get cpool & tags index
   __ get_cpool_and_tags(rcx, rdx); // rcx=cpool, rdx=tags array
   __ get_unsigned_2_byte_index_at_bcp(rbx, 1); // rbx=index
@@ -4486,7 +4487,21 @@ void TemplateTable::checkcast() {
   __ load_resolved_klass_at_index(rax, rcx, rbx);
 
   __ bind(resolved);
-  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+
+  if (EnableValhalla) {
+    // handling of null for primitive class is now handled here
+    // behavior depends on if the class is nullable flattenable or not
+    Label not_null_inline_type_slow_path;
+    __ testptr(rdx, rdx); // object is in rdx
+    __ jcc(Assembler::notZero, not_null_inline_type_slow_path);
+    __ movl(rbx, Address(rax, InstanceKlass::misc_flags_offset()));
+    __ testl(rbx, InstanceKlass::_misc_is_nullable_flattenable);
+    __ jcc(Assembler::notZero, done);
+    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    __ bind (not_null_inline_type_slow_path);
+  }
+
+    Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
   __ load_klass(rbx, rdx, tmp_load_klass);
 
   // Generate subtype check.  Blows rcx, rdi.  Object in rdx.
@@ -4515,13 +4530,15 @@ void TemplateTable::checkcast() {
     __ get_cpool_and_tags(rcx, rdx); // rcx=cpool, rdx=tags array
     __ get_unsigned_2_byte_index_at_bcp(rbx, 1); // rbx=index
     // See if CP entry is a Q-descriptor
-    __ movzbl(rcx, Address(rdx, rbx,
+    __ movzbl(rdx, Address(rdx, rbx,
         Address::times_1,
         Array<u1>::base_offset_in_bytes()));
-    __ andl (rcx, JVM_CONSTANT_QDescBit);
-    __ cmpl(rcx, JVM_CONSTANT_QDescBit);
+    __ andl (rdx, JVM_CONSTANT_QDescBit);
+    __ cmpl(rdx, JVM_CONSTANT_QDescBit);
     __ jcc(Assembler::notEqual, done);
-    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    // It's a checkcast againt a Q-type, class has to be loaded to check
+    // if it's a nullable flattenable class, jumpping ot slow path
+    __ jmp(slow_path);
   }
 
   __ bind(done);
