@@ -827,8 +827,10 @@ void TemplateTable::aaload() {
   index_check(array, index); // kills rbx
   __ profile_array(rbx, array, rcx);
   if (UseFlatArray) {
-    Label is_flat_array, done;
+    Label is_flat_array, done, slow_path;
     __ test_flattened_array_oop(array, rbx, is_flat_array);
+    __ test_null_free_array_oop(array, rbx, slow_path);
+
     do_oop_load(_masm,
                 Address(array, index,
                         UseCompressedOops ? Address::times_4 : Address::times_ptr,
@@ -838,6 +840,12 @@ void TemplateTable::aaload() {
     __ jmp(done);
     __ bind(is_flat_array);
     __ read_flattened_element(array, index, rbx, rcx, rax);
+    __ jmp(done);
+
+    __ bind(slow_path);
+    __ movptr(rcx, array);
+    call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_load), rcx, rax);
+
     __ bind(done);
   } else {
     do_oop_load(_masm,
@@ -1195,7 +1203,8 @@ void TemplateTable::aastore() {
     __ jmp(store_null);
 
     __ bind(is_null_into_value_array_npe);
-    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_store), rax, rdx, rcx);
+    __ jmp(done);
 
     __ bind(store_null);
   }
@@ -1224,6 +1233,11 @@ void TemplateTable::aastore() {
     // rbx: value's klass
     // rdx: array
     // rdi: array klass
+
+    // need special handling for nullable flattenable in order to update the pivot field
+    Label is_nullable_flattenable;
+    __ test_klass_is_nullable_flattenable(rbx, rax, is_nullable_flattenable);
+
     __ test_klass_is_empty_inline_type(rbx, rax, done);
 
     // calc dst for copy
@@ -1235,6 +1249,13 @@ void TemplateTable::aastore() {
     __ data_for_oop(rcx, rcx, rbx);
 
     __ access_value_copy(IN_HEAP, rcx, rax, rbx);
+    __ jmp(done);
+
+    __ bind(is_nullable_flattenable);
+    __ movl(rax, at_tos_p1()); // index
+    __ movptr(rbx, at_tos());  // value
+    __ movptr(rdx, at_tos_p2()); // array
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_store), rbx, rdx, rax);
   }
   // Pop stack arguments
   __ bind(done);
@@ -4496,7 +4517,7 @@ void TemplateTable::checkcast() {
     __ jcc(Assembler::notZero, not_null_inline_type_slow_path);
     __ movl(rbx, Address(rax, InstanceKlass::misc_flags_offset()));
     __ testl(rbx, InstanceKlass::_misc_is_nullable_flattenable);
-    __ jcc(Assembler::notZero, done);
+    __ jcc(Assembler::notZero, ok_is_subtype);
     __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
     __ bind (not_null_inline_type_slow_path);
   }

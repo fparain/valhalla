@@ -182,7 +182,12 @@ int ObjArrayKlass::oop_size(oop obj) const {
 objArrayOop ObjArrayKlass::allocate(int length, TRAPS) {
   check_array_allocation_length(length, arrayOopDesc::max_array_length(T_OBJECT), CHECK_NULL);
   int size = objArrayOopDesc::object_size(length);
-  bool populate_null_free = is_null_free_array_klass();
+  bool populate_null_free = false;
+  if (is_null_free_array_klass()) {
+    if (!InlineKlass::cast(element_klass())->is_nullable_flattenable()) {
+      populate_null_free = true;
+    }
+  }
   objArrayOop array =  (objArrayOop)Universe::heap()->array_allocate(this, size, length,
                                                        /* do_zero */ true, THREAD);
   if (populate_null_free) {

@@ -490,14 +490,65 @@ JRT_ENTRY(void, InterpreterRuntime::anewarray(JavaThread* current, ConstantPool*
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_load(JavaThread* current, arrayOopDesc* array, int index))
-  flatArrayHandle vah(current, (flatArrayOop)array);
-  oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
-  current->set_vm_result(value_holder);
+  ArrayKlass* aklass = ArrayKlass::cast(array->klass());
+  InlineKlass* elm_klass = InlineKlass::cast(aklass->element_klass());
+  if (aklass->is_flatArray_klass()) {
+    flatArrayHandle vah(current, (flatArrayOop)array);
+    FlatArrayKlass* vaklass = FlatArrayKlass::cast(vah()->klass());
+    if (elm_klass->is_nullable_flattenable()) {
+      // Pb: how to read the value of the pivot field of a flattened array element?
+      // We trick the oopDesc method bool_field() which only requires an oop and an offset
+      // the oop is the array and the offset is computed from the element index and the pivot offset
+      int pivot_offset = ((address)((flatArrayOopDesc*)array)->value_at_addr(index, vaklass->layout_helper())) - (address)array
+                          + elm_klass->null_pivot_offset() - elm_klass->first_field_offset();
+      jboolean is_valid = vah()->bool_field(pivot_offset);
+      if (is_valid) {
+        oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
+        current->set_vm_result(value_holder);
+      } else {
+        current->set_vm_result(NULL);
+      }
+    } else {
+      oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
+      current->set_vm_result(value_holder);
+    }
+  } else {
+    objArrayOop oa = objArrayOop(array);
+    current->set_vm_result(oa->obj_at(index));
+  }
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void* val, arrayOopDesc* array, int index))
-  assert(val != NULL, "can't store null into flat array");
-  ((flatArrayOop)array)->value_copy_to_index(cast_to_oop(val), index);
+  Klass* k = ((oopDesc*)array)->klass();
+  if (k->is_flatArray_klass()) {
+    flatArrayHandle vah(current, (flatArrayOop)array);
+    FlatArrayKlass* vaklass = FlatArrayKlass::cast(k);
+    InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
+    if (val == NULL) {
+      if (!elm_klass->is_nullable_flattenable()) {
+        THROW(vmSymbols::java_lang_NullPointerException());
+      } else {
+        // Writting null to a flat array of nullable flattenable
+        // Take the pre-allocated default value and copy its content to the element entry
+        // This would reset all fields, including oops and the pivot field
+        vah()->value_copy_to_index(elm_klass->default_value(), index);
+      }
+    } else {
+      vah()->value_copy_to_index(cast_to_oop(val), index);
+      int pivot_offset = ((address)vah()->value_at_addr(index, vaklass->layout_helper())) - (address)(oopDesc*)vah()
+                          + elm_klass->null_pivot_offset() - elm_klass->first_field_offset();
+      vah()->bool_field_put(pivot_offset, true);
+    }
+  } else {
+    ObjArrayKlass* vaklass = ObjArrayKlass::cast(k);
+    if (val == NULL) {
+      InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
+      if (!elm_klass->is_nullable_flattenable()) {
+        THROW(vmSymbols::java_lang_NullPointerException());
+      }
+    }
+    ((objArrayOopDesc*)array)->obj_at_put(index, (oopDesc*)val);
+  }
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::multianewarray(JavaThread* current, jint* first_size_address))

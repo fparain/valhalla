@@ -1300,7 +1300,7 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
                                                        Register t1, Register t2,
                                                        Register obj) {
   assert_different_registers(array, index, t1, t2);
-  Label alloc_failed, empty_value, done;
+  Label alloc_failed, empty_value, done, nullable_flattenable_jmp;
   const Register array_klass = t2;
   const Register elem_klass = t1;
   const Register alloc_temp = LP64_ONLY(rscratch1) NOT_LP64(rsi);
@@ -1310,6 +1310,9 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
   Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
   load_klass(array_klass, array, tmp_load_klass);
   movptr(elem_klass, Address(array_klass, ArrayKlass::element_klass_offset()));
+
+  // check for nullable flattenable klass
+  test_klass_is_nullable_flattenable(elem_klass, dst_temp, nullable_flattenable_jmp); // force slow path for nullable flattenable
 
   //check for empty value klass
   test_klass_is_empty_inline_type(elem_klass, dst_temp, empty_value);
@@ -1333,6 +1336,7 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
 
   bind(alloc_failed);
   pop(index);
+  bind(nullable_flattenable_jmp);
   if (array == c_rarg2) {
     mov(elem_klass, array);
     array = elem_klass;
