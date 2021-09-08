@@ -93,6 +93,14 @@ bool ciInlineKlass::is_empty() {
   return nof_nonstatic_fields() == 0;
 }
 
+bool ciInlineKlass::is_nullable_flattenable() const {
+  GUARDED_VM_ENTRY(return to_InlineKlass()->is_nullable_flattenable();)
+}
+
+int ciInlineKlass::null_pivot_offset() const {
+  GUARDED_VM_ENTRY(return to_InlineKlass()->null_pivot_offset();)
+}
+
 // When passing an inline type's fields as arguments, count the number
 // of argument slots that are needed
 int ciInlineKlass::inline_arg_slots() {
