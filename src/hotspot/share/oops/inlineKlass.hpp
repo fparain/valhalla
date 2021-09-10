@@ -267,7 +267,7 @@ class InlineKlass: public InstanceKlass {
     *((int*)adr_default_value_offset()) = offset;
   }
 
-  int default_value_offset() {
+  int default_value_offset() const {
     int offset = *((int*)adr_default_value_offset());
     assert(offset != 0, "must not be called if not initialized");
     return offset;
@@ -278,6 +278,9 @@ class InlineKlass: public InstanceKlass {
   }
 
   oop default_value();
+
+  bool is_all_zero(address addr);
+
   void deallocate_contents(ClassLoaderData* loader_data);
   static void cleanup(InlineKlass* ik) ;
 

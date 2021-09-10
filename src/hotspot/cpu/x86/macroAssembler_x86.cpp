@@ -2755,8 +2755,22 @@ void MacroAssembler::test_klass_is_empty_inline_type(Register klass, Register te
   }
 #endif
   movl(temp_reg, Address(klass, InstanceKlass::misc_flags_offset()));
-  testl(temp_reg, InstanceKlass::misc_flags_is_empty_inline_type());
+  testl(temp_reg, InstanceKlass::misc_flag_is_empty_inline_type());
   jcc(Assembler::notZero, is_empty_inline_type);
+}
+
+void MacroAssembler::test_klass_is_nullable_with_invalid_default(Register klass, Register temp_reg, Label& is_nullable_with_invalid_default) {
+#ifdef ASSERT
+  {
+    Label done_check;
+    test_klass_is_inline_type(klass, temp_reg, done_check);
+    stop("test_klass_is_nullable_with_invalid_default with non inline type klass");
+    bind(done_check);
+  }
+#endif
+  movl(temp_reg, Address(klass, InstanceKlass::misc_flags_offset()));
+  testl(temp_reg, InstanceKlass::misc_flag_is_nullable_with_invalid_default());
+  jcc(Assembler::notZero, is_nullable_with_invalid_default);
 }
 
 void MacroAssembler::test_field_is_null_free_inline_type(Register flags, Register temp_reg, Label& is_null_free_inline_type) {
@@ -2782,6 +2796,15 @@ void MacroAssembler::test_field_is_inlined(Register flags, Register temp_reg, La
   testl(temp_reg, temp_reg);
   jcc(Assembler::notZero, is_inlined);
 }
+
+void MacroAssembler::test_field_is_nullable_with_invalid_default(Register flags, Register temp_reg, Label& is_nullable_with_invalid_default) {
+  movl(temp_reg, flags);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_nullable_with_invalid_default_shift);
+  andl(temp_reg, 0x1);
+  testl(temp_reg, temp_reg);
+  jcc(Assembler::notZero, is_nullable_with_invalid_default);
+}
+
 
 void MacroAssembler::test_oop_prototype_bit(Register oop, Register temp_reg, int32_t test_bit, bool jmp_set, Label& jmp_label) {
   Label test_mark_word;

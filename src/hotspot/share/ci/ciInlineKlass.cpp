@@ -93,6 +93,10 @@ bool ciInlineKlass::is_empty() {
   return nof_nonstatic_fields() == 0;
 }
 
+bool ciInlineKlass::is_nullable_with_invalid_default() const {
+  GUARDED_VM_ENTRY(return to_InlineKlass()->is_nullable_with_invalid_default();)
+}
+
 // When passing an inline type's fields as arguments, count the number
 // of argument slots that are needed
 int ciInlineKlass::inline_arg_slots() {

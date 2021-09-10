@@ -139,6 +139,7 @@ class InlineKlassFixedBlock {
   address* _pack_handler_jobject;
   address* _unpack_handler;
   int* _default_value_offset;
+  int* _null_pivot_offset;
   ArrayKlass** _null_free_inline_array_klasses;
   int _alignment;
   int _first_field_offset;
@@ -286,7 +287,8 @@ class InstanceKlass: public Klass {
     _misc_invalid_inline_super                = 1 << 20, // invalid super type for an inline type
     _misc_invalid_identity_super              = 1 << 21, // invalid super type for an identity type
     _misc_has_injected_identityObject         = 1 << 22, // IdentityObject has been injected by the JVM
-    _misc_has_injected_primitiveObject        = 1 << 23  // PrimitiveObject has been injected by the JVM
+    _misc_has_injected_primitiveObject        = 1 << 23, // PrimitiveObject has been injected by the JVM
+    _misc_is_nullable_with_invalid_default    = 1 << 24  // Flattened form must support the null value and all zero default value is invalid
   };
 
   // (*) An inline type is considered empty if it contains no non-static fields or
@@ -493,6 +495,14 @@ class InstanceKlass: public Klass {
     _misc_flags |= _misc_has_injected_primitiveObject;
   }
 
+  bool is_nullable_with_invalid_default() const {
+    return (_misc_flags & _misc_is_nullable_with_invalid_default);
+  }
+
+  void set_is_nullable_with_invalid_default() {
+    _misc_flags |= _misc_is_nullable_with_invalid_default;
+  }
+
   // field sizes
   int nonstatic_field_size() const         { return _nonstatic_field_size; }
   void set_nonstatic_field_size(int size)  { _nonstatic_field_size = size; }
@@ -687,7 +697,8 @@ public:
 
   static ByteSize kind_offset() { return in_ByteSize(offset_of(InstanceKlass, _kind)); }
   static ByteSize misc_flags_offset() { return in_ByteSize(offset_of(InstanceKlass, _misc_flags)); }
-  static u4 misc_flags_is_empty_inline_type() { return _misc_is_empty_inline_type; }
+  static u4 misc_flag_is_empty_inline_type() { return _misc_is_empty_inline_type; }
+  static u4 misc_flag_is_nullable_with_invalid_default() { return _misc_is_nullable_with_invalid_default; }
 
   // initialization (virtuals from Klass)
   bool should_be_initialized() const;  // means that initialize should be called

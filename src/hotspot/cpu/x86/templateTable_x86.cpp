@@ -827,8 +827,10 @@ void TemplateTable::aaload() {
   index_check(array, index); // kills rbx
   __ profile_array(rbx, array, rcx);
   if (UseFlatArray) {
-    Label is_flat_array, done;
+    Label is_flat_array, done, slow_path;
     __ test_flattened_array_oop(array, rbx, is_flat_array);
+    __ test_null_free_array_oop(array, rbx, slow_path);
+
     do_oop_load(_masm,
                 Address(array, index,
                         UseCompressedOops ? Address::times_4 : Address::times_ptr,
@@ -838,6 +840,12 @@ void TemplateTable::aaload() {
     __ jmp(done);
     __ bind(is_flat_array);
     __ read_flattened_element(array, index, rbx, rcx, rax);
+    __ jmp(done);
+
+    __ bind(slow_path);
+    __ movptr(rcx, array);
+    call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_load), rcx, rax);
+
     __ bind(done);
   } else {
     do_oop_load(_masm,
@@ -1195,7 +1203,8 @@ void TemplateTable::aastore() {
     __ jmp(store_null);
 
     __ bind(is_null_into_value_array_npe);
-    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_store), rax, rdx, rcx);
+    __ jmp(done);
 
     __ bind(store_null);
   }
@@ -1224,6 +1233,11 @@ void TemplateTable::aastore() {
     // rbx: value's klass
     // rdx: array
     // rdi: array klass
+
+    // need special handling for nullable flattenable in order to update the pivot field
+    Label is_nullable_with_invalid_default;
+    __ test_klass_is_nullable_with_invalid_default(rbx, rax, is_nullable_with_invalid_default);
+
     __ test_klass_is_empty_inline_type(rbx, rax, done);
 
     // calc dst for copy
@@ -1235,6 +1249,13 @@ void TemplateTable::aastore() {
     __ data_for_oop(rcx, rcx, rbx);
 
     __ access_value_copy(IN_HEAP, rcx, rax, rbx);
+    __ jmp(done);
+
+    __ bind(is_nullable_with_invalid_default);
+    __ movl(rax, at_tos_p1()); // index
+    __ movptr(rbx, at_tos());  // value
+    __ movptr(rdx, at_tos_p2()); // array
+    call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::value_array_store), rbx, rdx, rax);
   }
   // Pop stack arguments
   __ bind(done);
@@ -3000,22 +3021,24 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
           __ jmp(Done);
         // field is a null free inline type, must not return null even if uninitialized
         __ bind(is_null_free_inline_type);
-           __ testptr(rax, rax);
+          __ testptr(rax, rax);
           __ jcc(Assembler::zero, uninitialized);
             __ push(atos);
             __ jmp(Done);
           __ bind(uninitialized);
-            __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
   #ifdef _LP64
             Label slow_case, finish;
+            __ test_field_is_nullable_with_invalid_default(flags2, rscratch1, finish); // if nullable flattenable: nothing to do, rax already contains null
             __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
             __ jcc(Assembler::notEqual, slow_case);
           __ get_default_value_oop(rcx, off, rax);
           __ jmp(finish);
           __ bind(slow_case);
   #endif // LP64
+            __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
             __ call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::uninitialized_static_inline_type_field),
                   obj, flags2);
+
   #ifdef _LP64
             __ bind(finish);
   #endif // _LP64
@@ -3047,20 +3070,36 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
             __ pop(rcx);
             __ testptr(rax, rax);
             __ jcc(Assembler::notZero, nonnull);
-              __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
-              __ get_inline_type_field_klass(rcx, flags2, rbx);
-              __ get_default_value_oop(rbx, rcx, rax);
+              // oop is null, must return null if nullable flattenable, otherwise return the default value
+              Label is_nullable_with_invalid_default;
+              __ test_field_is_nullable_with_invalid_default(flags2, rscratch1, is_nullable_with_invalid_default);
+                __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
+                __ get_inline_type_field_klass(rcx, flags2, rbx);
+                __ get_default_value_oop(rbx, rcx, rax);
+                __ jmp(nonnull);
+              __ bind(is_nullable_with_invalid_default);
+                 // nothing to do, rax is already null
             __ bind(nonnull);
             __ verify_oop(rax);
             __ push(atos);
             __ jmp(rewrite_inline);
           __ bind(is_inlined);
           // field is inlined
-            __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
-            pop_and_check_object(rax);
-            __ read_inlined_field(rcx, flags2, rbx, rax);
-            __ verify_oop(rax);
-            __ push(atos);
+          // if the field is nullable flattenable and a vull, return null, otherwise return a heap buffered value
+            Label is_nullable_with_invalid_default2;
+            __ test_field_is_nullable_with_invalid_default(flags2, rscratch1, is_nullable_with_invalid_default2);
+              __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
+              pop_and_check_object(rax);
+              __ read_inlined_field(rcx, flags2, rbx, rax);
+              __ verify_oop(rax);
+              __ push(atos);
+              __ jmp(rewrite_inline);
+            __ bind(is_nullable_with_invalid_default2);
+              __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
+              pop_and_check_object(rax);
+              __ read_nullable_field_with_invalid_default(rcx, flags2, rbx, rax);
+              __ verify_oop(rax);
+              __ push(atos);
         __ bind(rewrite_inline);
         if (rc == may_rewrite) {
           patch_bytecode(Bytecodes::_fast_qgetfield, bc, rbx);
@@ -3384,11 +3423,12 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     } else {
       __ pop(atos);
       if (is_static) {
-        Label is_inline_type;
+        Label not_null_free;
         if (EnableValhalla) {
-          __ test_field_is_not_null_free_inline_type(flags2, rscratch1, is_inline_type);
+          __ test_field_is_not_null_free_inline_type(flags2, rscratch1, not_null_free);
+          __ test_field_is_nullable_with_invalid_default(flags2, rscratch1, not_null_free);
           __ null_check(rax);
-          __ bind(is_inline_type);
+          __ bind(not_null_free);
         }
         do_oop_store(_masm, field, rax);
         __ jmp(Done);
@@ -3409,21 +3449,29 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
         if (EnableValhalla) {
           // Implementation of the inline type semantic
           __ bind(is_inline_type);
-          __ null_check(rax);
-          __ test_field_is_inlined(flags2, rscratch1, is_inlined);
-          // field is not inlined
-          pop_and_check_object(obj);
-          // Store into the field
-          do_oop_store(_masm, field, rax);
-          __ jmp(rewrite_inline);
-          __ bind(is_inlined);
-          // field is inlined
-          pop_and_check_object(obj);
-          assert_different_registers(rax, rdx, obj, off);
-          __ load_klass(rdx, rax, rscratch1);
-          __ data_for_oop(rax, rax, rdx);
-          __ addptr(obj, off);
-          __ access_value_copy(IN_HEAP, rax, obj, rdx);
+          Label is_nullable_with_invalid_default;
+          __ test_field_is_nullable_with_invalid_default(flags2, rscratch1, is_nullable_with_invalid_default);
+            __ null_check(rax);
+            __ test_field_is_inlined(flags2, rscratch1, is_inlined);
+            // field is not inlined
+            pop_and_check_object(obj);
+            // Store into the field
+            do_oop_store(_masm, field, rax);
+            __ jmp(rewrite_inline);
+            __ bind(is_inlined);
+            // field is inlined
+            pop_and_check_object(obj);
+            assert_different_registers(rax, rdx, obj, off);
+            __ load_klass(rdx, rax, rscratch1);
+            __ data_for_oop(rax, rax, rdx);
+            __ addptr(obj, off);
+            __ access_value_copy(IN_HEAP, rax, obj, rdx);
+            __ jmp (rewrite_inline);
+          __ bind(is_nullable_with_invalid_default);
+            __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
+            pop_and_check_object(obj);
+            __ movptr(rbx, obj); // shuffling arguments because of the calling convention
+            __ write_nullable_field_with_invalid_default(rbx, rdx, rax);
           __ bind(rewrite_inline);
           if (rc == may_rewrite) {
             patch_bytecode(Bytecodes::_fast_qputfield, bc, rbx, true, byte_no);
@@ -3676,18 +3724,24 @@ void TemplateTable::fast_storefield_helper(Address field, Register rax, Register
   switch (bytecode()) {
   case Bytecodes::_fast_qputfield:
     {
-      Label is_inlined, done;
-      __ null_check(rax);
-      __ test_field_is_inlined(flags, rscratch1, is_inlined);
-      // field is not inlined
-      do_oop_store(_masm, field, rax);
-      __ jmp(done);
-      __ bind(is_inlined);
-      // field is inlined
-      __ load_klass(rdx, rax, rscratch1);
-      __ data_for_oop(rax, rax, rdx);
-      __ lea(rcx, field);
-      __ access_value_copy(IN_HEAP, rax, rcx, rdx);
+      Label is_inlined, is_nullable_with_invalid_default, done;
+      __ test_field_is_nullable_with_invalid_default(flags, rscratch1, is_nullable_with_invalid_default);
+        __ null_check(rax);
+        __ test_field_is_inlined(flags, rscratch1, is_inlined);
+          // field is not inlined
+          do_oop_store(_masm, field, rax);
+          __ jmp(done);
+        __ bind(is_inlined);
+          // field is inlined
+          __ load_klass(rdx, rax, rscratch1);
+          __ data_for_oop(rax, rax, rdx);
+          __ lea(rcx, field);
+          __ access_value_copy(IN_HEAP, rax, rcx, rdx);
+          __ jmp(done);
+        __ bind(is_nullable_with_invalid_default);
+          __ andl(flags, ConstantPoolCacheEntry::field_index_mask);
+          __ movptr(rbx, rcx); // shuffling arguments because of the calling convention
+          __ write_nullable_field_with_invalid_default(rbx, rdx, rax);
       __ bind(done);
     }
     break;
@@ -3786,30 +3840,42 @@ void TemplateTable::fast_accessfield(TosState state) {
         __ load_heap_oop(rax, field);
         __ testptr(rax, rax);
         __ jcc(Assembler::notZero, nonnull);
-          __ movl(rdx, Address(rcx, rbx, Address::times_ptr,
-                             in_bytes(ConstantPoolCache::base_offset() +
-                                      ConstantPoolCacheEntry::flags_offset())));
-          __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
-          __ movptr(rcx, Address(rcx, rbx, Address::times_ptr,
-                                       in_bytes(ConstantPoolCache::base_offset() +
-                                                ConstantPoolCacheEntry::f1_offset())));
-          __ get_inline_type_field_klass(rcx, rdx, rbx);
-          __ get_default_value_oop(rbx, rcx, rax);
+          // if field is nullable with invalid default return null, otherwise return the default value
+          Label is_nullable_with_invalid_default;
+          __ test_field_is_nullable_with_invalid_default(rscratch1, rscratch2, is_nullable_with_invalid_default);
+            __ movl(rdx, Address(rcx, rbx, Address::times_ptr,
+                              in_bytes(ConstantPoolCache::base_offset() +
+                                        ConstantPoolCacheEntry::flags_offset())));
+            __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
+            __ movptr(rcx, Address(rcx, rbx, Address::times_ptr,
+                                        in_bytes(ConstantPoolCache::base_offset() +
+                                                  ConstantPoolCacheEntry::f1_offset())));
+            __ get_inline_type_field_klass(rcx, rdx, rbx);
+            __ get_default_value_oop(rbx, rcx, rax);
+            __ jmp(nonnull);
+          __ bind(is_nullable_with_invalid_default);
+            // __ movptr(rax, (int32_t) NULL_WORD);   // useless, rax is already null
         __ bind(nonnull);
         __ verify_oop(rax);
         __ jmp(Done);
       __ bind(is_inlined);
       // field is inlined
+        // if field is nullable with invalid default, call runtime, otherwise proceed to create heap buffered value
         __ push(rdx); // save offset
         __ movl(rdx, Address(rcx, rbx, Address::times_ptr,
-                           in_bytes(ConstantPoolCache::base_offset() +
+                          in_bytes(ConstantPoolCache::base_offset() +
                                     ConstantPoolCacheEntry::flags_offset())));
         __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
         __ movptr(rcx, Address(rcx, rbx, Address::times_ptr,
-                                     in_bytes(ConstantPoolCache::base_offset() +
+                                    in_bytes(ConstantPoolCache::base_offset() +
                                               ConstantPoolCacheEntry::f1_offset())));
         __ pop(rbx); // restore offset
-        __ read_inlined_field(rcx, rdx, rbx, rax);
+        Label is_nullable_with_invalis_default2;
+        __ test_field_is_nullable_with_invalid_default(rscratch1, rscratch2, is_nullable_with_invalis_default2);
+          __ read_inlined_field(rcx, rdx, rbx, rax);
+          __ jmp(Done);
+        __ bind(is_nullable_with_invalis_default2);
+          __ read_nullable_field_with_invalid_default(rcx, rdx, rbx, rax);
       __ bind(Done);
       __ verify_oop(rax);
     }
@@ -4358,8 +4424,16 @@ void TemplateTable::defaultvalue() {
   __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
   __ jcc(Assembler::notEqual, slow_case);
 
+  Label invalid_default;
+  __ test_klass_is_nullable_with_invalid_default(rcx, rdx, invalid_default);
+
   // have a resolved InlineKlass in rcx, return the default value oop from it
   __ get_default_value_oop(rcx, rdx, rax);
+  __ jmp(done);
+
+  __ bind(invalid_default);
+  // never push an invalid value on the stack, push the null reference instead
+  __ movptr(rax, (int32_t) NULL_WORD);
   __ jmp(done);
 
   __ bind(slow_case);
@@ -4405,10 +4479,11 @@ void TemplateTable::arraylength() {
 
 void TemplateTable::checkcast() {
   transition(atos, atos);
-  Label done, is_null, ok_is_subtype, quicked, resolved;
+  Label done, is_null, ok_is_subtype, quicked, resolved, slow_path;
   __ testptr(rax, rax); // object is in rax
   __ jcc(Assembler::zero, is_null);
 
+  __ bind(slow_path);
   // Get cpool & tags index
   __ get_cpool_and_tags(rcx, rdx); // rcx=cpool, rdx=tags array
   __ get_unsigned_2_byte_index_at_bcp(rbx, 1); // rbx=index
@@ -4441,7 +4516,21 @@ void TemplateTable::checkcast() {
   __ load_resolved_klass_at_index(rax, rcx, rbx);
 
   __ bind(resolved);
-  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+
+  if (EnableValhalla) {
+    // handling of null for primitive class is now handled here
+    // behavior depends on if the class is nullable with invalid default or not
+    Label not_null_inline_type_slow_path;
+    __ testptr(rdx, rdx); // object is in rdx
+    __ jcc(Assembler::notZero, not_null_inline_type_slow_path);
+    __ movl(rbx, Address(rax, InstanceKlass::misc_flags_offset()));
+    __ testl(rbx, InstanceKlass::_misc_is_nullable_with_invalid_default);
+    __ jcc(Assembler::notZero, ok_is_subtype);
+    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    __ bind (not_null_inline_type_slow_path);
+  }
+
+    Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
   __ load_klass(rbx, rdx, tmp_load_klass);
 
   // Generate subtype check.  Blows rcx, rdi.  Object in rdx.
@@ -4470,13 +4559,15 @@ void TemplateTable::checkcast() {
     __ get_cpool_and_tags(rcx, rdx); // rcx=cpool, rdx=tags array
     __ get_unsigned_2_byte_index_at_bcp(rbx, 1); // rbx=index
     // See if CP entry is a Q-descriptor
-    __ movzbl(rcx, Address(rdx, rbx,
+    __ movzbl(rdx, Address(rdx, rbx,
         Address::times_1,
         Array<u1>::base_offset_in_bytes()));
-    __ andl (rcx, JVM_CONSTANT_QDescBit);
-    __ cmpl(rcx, JVM_CONSTANT_QDescBit);
+    __ andl (rdx, JVM_CONSTANT_QDescBit);
+    __ cmpl(rdx, JVM_CONSTANT_QDescBit);
     __ jcc(Assembler::notEqual, done);
-    __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
+    // It's a checkcast againt a Q-type, class has to be loaded to check
+    // if it's a nullable with invalid default class, jumpping ot slow path
+    __ jmp(slow_path);
   }
 
   __ bind(done);

@@ -927,6 +927,18 @@ void ClassFileParser::parse_interfaces(const ClassFileStream* stream,
         // needs field parsing, delay unitl post_process_parse_stream()
         _implements_primitiveObject = true;
       }
+      if (ik->name() == vmSymbols::java_lang_NullableWithInvalidDefault()) {
+        if (!is_inline_type()) {
+          ResourceMark rm(THREAD);
+          Exceptions::fthrow(
+            THREAD_AND_LOCATION,
+            vmSymbols::java_lang_IncompatibleClassChangeError(),
+            "Identity type %s attempts to implement interface java.lang.NullableWithInvalidDefault",
+            _class_name->as_klass_external_name());
+          return;
+        }
+        _is_nullable_with_invalid_default = true;
+      }
       _temp_local_interfaces->append(ik);
     }
 
@@ -5589,6 +5601,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
     ik->set_has_injected_primitiveObject();
   }
 
+  if (_is_nullable_with_invalid_default) {
+    ik->set_is_nullable_with_invalid_default();
+  }
+
   assert(_fac != NULL, "invariant");
   ik->set_static_oop_field_count(_fac->count[STATIC_OOP] + _fac->count[STATIC_INLINE]);
 
@@ -5939,6 +5955,7 @@ ClassFileParser::ClassFileParser(ClassFileStream* stream,
   _has_injected_identityObject(false),
   _implements_primitiveObject(false),
   _has_injected_primitiveObject(false),
+  _is_nullable_with_invalid_default(false),
   _has_finalizer(false),
   _has_empty_finalizer(false),
   _has_vanilla_constructor(false),

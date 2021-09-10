@@ -74,6 +74,16 @@ oop InlineKlass::default_value() {
   return val;
 }
 
+bool InlineKlass::is_all_zero(address addr) {
+  assert(is_nullable_with_invalid_default(), "Should not be invoked on anything else");
+  // WARNING: this algorithm is unsafe for security critical values
+  // because the required CPU time depends on the number of equal bytes.
+  for (int i = 0; i < this->get_exact_size_in_bytes(); i++) {
+    if (addr[i] != 0) return false;
+  }
+  return true;
+}
+
 int InlineKlass::first_field_offset_old() {
 #ifdef ASSERT
   int first_offset = INT_MAX;

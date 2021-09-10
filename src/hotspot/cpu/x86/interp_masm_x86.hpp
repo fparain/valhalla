@@ -247,6 +247,14 @@ class InterpreterMacroAssembler: public MacroAssembler {
                             Register field_index, Register field_offset,
                             Register obj = rax);
 
+  void read_nullable_field_with_invalid_default(Register holder_klass,
+                            Register field_index, Register field_offset,
+                            Register obj = rax);
+
+  void write_nullable_field_with_invalid_default(Register receiver,
+                                        Register field_index,
+                                        Register value);
+
   // Allocate value buffer in "obj" and read in flattened element at the given index
   // NOTES:
   //   - Return via "obj" must be rax

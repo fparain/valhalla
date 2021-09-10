@@ -265,31 +265,43 @@ JRT_ENTRY(void, InterpreterRuntime::defaultvalue(JavaThread* current, ConstantPo
   InlineKlass* vklass = InlineKlass::cast(k);
 
   vklass->initialize(THREAD);
-  oop res = vklass->default_value();
-  current->set_vm_result(res);
+  if (vklass->is_nullable_with_invalid_default()) {
+    current->set_vm_result(NULL);
+  } else {
+    current->set_vm_result(vklass->default_value());
+  }
 JRT_END
 
 JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCacheEntry* cpe, uintptr_t ptr))
-  oop obj = NULL;
+
   int recv_offset = type2size[as_BasicType(cpe->flag_state())];
   assert(frame::interpreter_frame_expression_stack_direction() == -1, "currently is -1 on all platforms");
   int ret_adj = (recv_offset + type2size[T_OBJECT] )* AbstractInterpreter::stackElementSize;
-  obj = (oopDesc*)(((uintptr_t*)ptr)[recv_offset * Interpreter::stackElementWords]);
-  if (obj == NULL) {
+
+  InlineKlass* ik = InlineKlass::cast(cpe->f1_as_klass());
+
+  oop obj = (oopDesc*)(((uintptr_t*)ptr)[recv_offset * Interpreter::stackElementWords]);
+  instanceHandle old_value_h(THREAD, (instanceOop)obj);
+
+  if (old_value_h() == NULL && !ik->is_nullable_with_invalid_default()) {
     THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
   }
-  assert(oopDesc::is_oop(obj), "Verifying receiver");
-  assert(obj->klass()->is_inline_klass(), "Must have been checked during resolution");
-  instanceHandle old_value_h(THREAD, (instanceOop)obj);
+
   oop ref = NULL;
   if (cpe->flag_state() == atos) {
     ref = *(oopDesc**)ptr;
   }
   Handle ref_h(THREAD, ref);
-  InlineKlass* ik = InlineKlass::cast(old_value_h()->klass());
+
   instanceOop new_value = ik->allocate_instance_buffer(CHECK_(ret_adj));
   Handle new_value_h = Handle(THREAD, new_value);
-  ik->inline_copy_oop_to_new_oop(old_value_h(), new_value_h());
+
+  if (old_value_h() != NULL) {
+    ik->inline_copy_oop_to_new_oop(old_value_h(), new_value_h());
+  } else {
+    ik->inline_copy_oop_to_new_oop(ik->default_value(), new_value_h());
+  }
+
   int offset = cpe->f2_as_offset();
   switch(cpe->flag_state()) {
     case ztos:
@@ -319,16 +331,21 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCa
     case atos:
       {
         if (cpe->is_null_free_inline_type())  {
+          int field_index = cpe->field_index();
+          InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
+          if (ref_h() == NULL && !field_ik->is_nullable_with_invalid_default()) {
+            THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
+          }
           if (!cpe->is_inlined()) {
-              if (ref_h() == NULL) {
-                THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
-              }
-              new_value_h()->obj_field_put(offset, ref_h());
+            new_value_h()->obj_field_put(offset, ref_h());
+          } else {
+            if (ref_h() == NULL) {
+              // using the pre-allocated default value to reset the flattened field to all zero
+              field_ik->write_inlined_field(new_value_h(), offset, field_ik->default_value(), CHECK_(ret_adj));
             } else {
-              int field_index = cpe->field_index();
-              InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
               field_ik->write_inlined_field(new_value_h(), offset, ref_h(), CHECK_(ret_adj));
             }
+          }
         } else {
           new_value_h()->obj_field_put(offset, ref_h());
         }
@@ -337,7 +354,11 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCa
     default:
       ShouldNotReachHere();
   }
-  current->set_vm_result(new_value_h());
+  if (ik->is_nullable_with_invalid_default() && ik->is_all_zero(((address)(oopDesc*)new_value_h()) + ik->first_field_offset())) {
+    current->set_vm_result(NULL);
+  } else {
+    current->set_vm_result(new_value_h());
+  }
   return ret_adj;
 JRT_END
 
@@ -408,6 +429,60 @@ JRT_ENTRY(void, InterpreterRuntime::read_inlined_field(JavaThread* current, oopD
   current->set_vm_result(res);
 JRT_END
 
+JRT_ENTRY(void, InterpreterRuntime::read_nullable_with_invalid_default(JavaThread* current, oopDesc* obj, int index, Klass* field_holder))
+  Handle obj_h(THREAD, obj);
+
+  assert(oopDesc::is_oop(obj), "Sanity check");
+
+  assert(field_holder->is_instance_klass(), "Sanity check");
+  InstanceKlass* klass = InstanceKlass::cast(field_holder);
+
+  assert(klass->field_is_inlined(index), "Sanity check");
+
+  InlineKlass* field_vklass = InlineKlass::cast(klass->get_inline_type_field_klass(index));
+  assert(field_vklass->is_initialized(), "Must be initialized at this point");
+  assert(field_vklass->is_nullable_with_invalid_default(), "Must be");
+
+  bool is_valid = !field_vklass->is_all_zero(((address)(oopDesc*)obj_h()) + klass->field_offset(index));
+  if (is_valid) {
+    oop res = field_vklass->read_inlined_field(obj_h(), klass->field_offset(index), CHECK);
+    current->set_vm_result(res);
+  } else {
+    current->set_vm_result(NULL);
+  }
+
+JRT_END
+
+JRT_ENTRY(void, InterpreterRuntime::write_nullable_with_invalid_default(JavaThread* current, oopDesc* rcv, int index, oopDesc* value))
+  Handle rcv_h(THREAD, rcv);
+  Handle value_h(THREAD, value);
+
+  InstanceKlass* rcv_klass = InstanceKlass::cast(rcv_h()->klass());
+  int offset = rcv_klass->field_offset(index);
+
+  // Note: at this point, we don't know if the field is flattened or not
+  // the non-flattened case could be handled in assembly code in a later optimization of the code
+
+  if (value_h() == NULL) {
+    if (rcv_klass->field_is_inlined(index)) {
+      // writing null equivalent to a flattened field, using the pre-allocated default value
+      // to set all fields to zero
+      InlineKlass* field_ik = InlineKlass::cast(rcv_klass->get_inline_type_field_klass(index));
+      field_ik->inline_copy_oop_to_payload(field_ik->default_value(), ((char*)(oopDesc*)rcv_h()) + offset);
+    } else {
+      // simple case, just write the null reference
+      rcv_h()->obj_field_put(offset, value_h());
+    }
+  } else {
+    if (rcv_klass->field_is_inlined(index)) {
+      InlineKlass* field_ik = InlineKlass::cast(rcv_klass->get_inline_type_field_klass(index));
+      field_ik->inline_copy_oop_to_payload(value_h(), ((char*)(oopDesc*)rcv_h()) + offset);  // do we need better encapsulation?
+    } else {
+      rcv_h()->obj_field_put(offset, value_h());
+    }
+  }
+JRT_END
+
 JRT_ENTRY(void, InterpreterRuntime::newarray(JavaThread* current, BasicType type, jint size))
   oop obj = oopFactory::new_typeArray(type, size, CHECK);
   current->set_vm_result(obj);
@@ -428,14 +503,57 @@ JRT_ENTRY(void, InterpreterRuntime::anewarray(JavaThread* current, ConstantPool*
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_load(JavaThread* current, arrayOopDesc* array, int index))
-  flatArrayHandle vah(current, (flatArrayOop)array);
-  oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
-  current->set_vm_result(value_holder);
+  ArrayKlass* aklass = ArrayKlass::cast(array->klass());
+  InlineKlass* elm_klass = InlineKlass::cast(aklass->element_klass());
+  if (aklass->is_flatArray_klass()) {
+    flatArrayHandle vah(current, (flatArrayOop)array);
+    FlatArrayKlass* vaklass = FlatArrayKlass::cast(vah()->klass());
+    if (elm_klass->is_nullable_with_invalid_default()) {
+      bool is_valid = !elm_klass->is_all_zero((address)((flatArrayOopDesc*)array)->value_at_addr(index, vaklass->layout_helper()));
+      if (is_valid) {
+        oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
+        current->set_vm_result(value_holder);
+      } else {
+        current->set_vm_result(NULL);
+      }
+    } else {
+      oop value_holder = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
+      current->set_vm_result(value_holder);
+    }
+  } else {
+    objArrayOop oa = objArrayOop(array);
+    current->set_vm_result(oa->obj_at(index));
+  }
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void* val, arrayOopDesc* array, int index))
-  assert(val != NULL, "can't store null into flat array");
-  ((flatArrayOop)array)->value_copy_to_index(cast_to_oop(val), index);
+  Klass* k = ((oopDesc*)array)->klass();
+  if (k->is_flatArray_klass()) {
+    flatArrayHandle vah(current, (flatArrayOop)array);
+    FlatArrayKlass* vaklass = FlatArrayKlass::cast(k);
+    InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
+    if (val == NULL) {
+      if (!elm_klass->is_nullable_with_invalid_default()) {
+        THROW(vmSymbols::java_lang_NullPointerException());
+      } else {
+        // Writting null to a flat array of nullable with invalid default
+        // Take the pre-allocated default value and copy its content to the element entry
+        // This would reset all fields, including oops
+        vah()->value_copy_to_index(elm_klass->default_value(), index);
+      }
+    } else {
+      vah()->value_copy_to_index(cast_to_oop(val), index);
+    }
+  } else {
+    ObjArrayKlass* vaklass = ObjArrayKlass::cast(k);
+    if (val == NULL) {
+      InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
+      if (!elm_klass->is_nullable_with_invalid_default()) {
+        THROW(vmSymbols::java_lang_NullPointerException());
+      }
+    }
+    ((objArrayOopDesc*)array)->obj_at_put(index, (oopDesc*)val);
+  }
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::multianewarray(JavaThread* current, jint* first_size_address))
@@ -922,6 +1040,24 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     }
   }
 
+  bool is_nullable_with_invalid_default = false;
+  if (info.signature()->is_Q_signature()) {
+    Klass* k = info.field_holder()->get_inline_type_field_klass_or_null(info.index());
+    if (k == NULL) {
+      assert(info.access_flags().is_static(), "This should happen only with circular references in static fields");
+      // The inline_type_field array is not fully populated yet, but at this point the field type should have been loaded
+      // so ask the system dictionary.
+      JavaThread* THREAD = current; // For exception macros.
+      InstanceKlass* klass = info.field_holder();
+      k = SystemDictionary::resolve_or_null(klass->field_signature(info.index())->fundamental_name(THREAD),
+          Handle(THREAD, klass->class_loader()),
+          Handle(THREAD, klass->protection_domain()),
+          CHECK);
+      assert(k != NULL, "Must have been loaded at this point!");
+    }
+    is_nullable_with_invalid_default = InstanceKlass::cast(k)->is_nullable_with_invalid_default();
+  }
+
   cp_cache_entry->set_field(
     get_code,
     put_code,
@@ -932,8 +1068,10 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     info.access_flags().is_final(),
     info.access_flags().is_volatile(),
     info.is_inlined(),
-    info.signature()->is_Q_signature() && info.is_inline_type()
+    info.signature()->is_Q_signature() && info.is_inline_type(),
+    is_nullable_with_invalid_default
   );
+
 }
 
 
