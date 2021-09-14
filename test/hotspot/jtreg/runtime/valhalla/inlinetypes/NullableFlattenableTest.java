@@ -48,10 +48,26 @@ public class NullableFlattenableTest {
   NF nf, nf2;;
   BigNF bigNF;
 
+  static primitive class Wrapper {
+    public NF field;
+    public Wrapper(NF val) {
+        field = val;
+    }
+  }
+
+  static void testWrapper() {
+    Wrapper w = new Wrapper(new NF());
+    Asserts.assertNotNull(w.field);
+    Object o = null;
+    w = new Wrapper((NF)o);
+    Asserts.assertNull(w.field);
+  }
+
   public static void main(String[] args) {
     Object o = null;
     NF[] array = new NF[10];
     BigNF[] array2 = new BigNF[10];
+
 
     // Checkcast
     testCheckCast();
@@ -72,6 +88,9 @@ public class NullableFlattenableTest {
     // running test twice to test quickened bytecodes
     test(new NullableFlattenableTest());
     test(new NullableFlattenableTest());
+
+    // test withfield
+    testWrapper();
   }
 
   static void testCheckCast() {

@@ -319,16 +319,23 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCa
     case atos:
       {
         if (cpe->is_null_free_inline_type())  {
+          int field_index = cpe->field_index();
+          InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
+          if (ref_h() == NULL && !field_ik->is_nullable_flattenable()) {
+            THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
+          }
           if (!cpe->is_inlined()) {
-              if (ref_h() == NULL) {
-                THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
-              }
-              new_value_h()->obj_field_put(offset, ref_h());
+            new_value_h()->obj_field_put(offset, ref_h());
+          } else {
+            if (field_ik->is_nullable_flattenable()) {
+              oop origin = ref_h() == NULL ? field_ik->default_value() : ref_h();
+              field_ik->write_inlined_field(new_value_h(), offset, origin, CHECK_(ret_adj));
+              int pivot_offset = offset + field_ik->null_pivot_offset() - field_ik->first_field_offset();
+              new_value_h()->bool_field_put(pivot_offset, ref_h() != NULL);
             } else {
-              int field_index = cpe->field_index();
-              InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
               field_ik->write_inlined_field(new_value_h(), offset, ref_h(), CHECK_(ret_adj));
             }
+          }
         } else {
           new_value_h()->obj_field_put(offset, ref_h());
         }
