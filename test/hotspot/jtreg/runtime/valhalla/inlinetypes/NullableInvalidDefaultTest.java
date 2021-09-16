@@ -29,6 +29,7 @@ import jdk.test.lib.Asserts;
  * @test
  * @summary Nullable Flattenable semantic test
  * @library /test/lib
+ * @compile -XDallowWithFieldOperator NullableInvalidDefaultTest.java
  * @run main/othervm -Xint -XX:InlineFieldMaxFlatSize=64 -XX:FlatArrayElementMaxSize=16 runtime.valhalla.inlinetypes.NullableInvalidDefaultTest
  */
 
@@ -41,6 +42,16 @@ public class NullableInvalidDefaultTest {
         i = 0; j = 0;
     }
 
+    public static NF setI(NF nf, int i) {
+      nf = __WithField(nf.i, i);
+      return nf;
+    }
+
+    public static NF setJ(NF nf, int j) {
+      nf = __WithField(nf.j, j);
+      return nf;
+    }
+
     public NF(int i) {
         // By setting one field to a value and the other to
         // this value plus one, we have the guarantee that at least
@@ -48,9 +59,9 @@ public class NullableInvalidDefaultTest {
         this.i = i;
         this.j = i + 1;
     }
-      }
+  }
 
-      static primitive class BigNF implements NullableWithInvalidDefault {
+  static primitive class BigNF implements NullableWithInvalidDefault {
     long j0, j1, j2, j3, j4, j5, j6, j7, j8, j9;
     long j10, j11, j12, j13, j14, j15, j16, j17, j18, j19;
 
@@ -80,6 +91,9 @@ public class NullableInvalidDefaultTest {
     // Checkcast
     testCheckCast();
 
+    // Withfield
+    testWithfield();
+
     // Arrays
     testUninitializedArrayElements(array, array2);
     testWritingNonNullValueToArrays(array, array2);
@@ -102,6 +116,16 @@ public class NullableInvalidDefaultTest {
     Object o = null;
     NF nf = (NF)o;
     Asserts.assertNull(nf, "Checkcast must let null pass for nullable flattenable types");
+  }
+
+  static void testWithfield() {
+    NF nf = new NF(1);
+    nf = NF.setI(nf, 0);
+    Asserts.assertNotNull(nf, "Should not be null, still one non zero field");
+    nf = NF.setJ(nf, 0);
+    Asserts.assertNull(nf, "Should be null once all fields are zeroed");
+    nf = NF.setJ(nf, 1);
+    Asserts.assertNotNull(nf, "Should not be null, after a field is set to non zero");
   }
 
   static void testUninitializedArrayElements(NF[] array, BigNF[] array2) {
