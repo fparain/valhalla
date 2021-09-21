@@ -184,7 +184,7 @@ objArrayOop ObjArrayKlass::allocate(int length, TRAPS) {
   int size = objArrayOopDesc::object_size(length);
   bool populate_null_free = false;
   if (is_null_free_array_klass()) {
-    if (!InlineKlass::cast(element_klass())->is_nullable_flattenable()) {
+    if (InlineKlass::cast(element_klass())->is_null_free()) {
       populate_null_free = true;
     }
   }

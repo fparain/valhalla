@@ -321,13 +321,13 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCa
         if (cpe->is_null_free_inline_type())  {
           int field_index = cpe->field_index();
           InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
-          if (ref_h() == NULL && !field_ik->is_nullable_flattenable()) {
+          if (ref_h() == NULL && field_ik->is_null_free()) {
             THROW_(vmSymbols::java_lang_NullPointerException(), ret_adj);
           }
           if (!cpe->is_inlined()) {
             new_value_h()->obj_field_put(offset, ref_h());
           } else {
-            if (field_ik->is_nullable_flattenable()) {
+            if (!field_ik->is_null_free()) {
               oop origin = ref_h() == NULL ? field_ik->default_value() : ref_h();
               field_ik->write_inlined_field(new_value_h(), offset, origin, CHECK_(ret_adj));
               int pivot_offset = offset + field_ik->null_pivot_offset() - field_ik->first_field_offset();
@@ -415,7 +415,7 @@ JRT_ENTRY(void, InterpreterRuntime::read_inlined_field(JavaThread* current, oopD
   current->set_vm_result(res);
 JRT_END
 
-JRT_ENTRY(void, InterpreterRuntime::read_nullable_flattenable_field(JavaThread* current, oopDesc* obj, int index, Klass* field_holder))
+JRT_ENTRY(void, InterpreterRuntime::read_nullable_flattened_field(JavaThread* current, oopDesc* obj, int index, Klass* field_holder))
   Handle obj_h(THREAD, obj);
 
   assert(oopDesc::is_oop(obj), "Sanity check");
@@ -427,7 +427,7 @@ JRT_ENTRY(void, InterpreterRuntime::read_nullable_flattenable_field(JavaThread* 
 
   InlineKlass* field_vklass = InlineKlass::cast(klass->get_inline_type_field_klass(index));
   assert(field_vklass->is_initialized(), "Must be initialized at this point");
-  assert(field_vklass->is_nullable_flattenable(), "Must be");
+  assert(!field_vklass->is_null_free(), "Must be");
 
   int pivot_offset = klass->field_offset(index) + field_vklass->null_pivot_offset() - field_vklass->first_field_offset();
   jboolean is_valid = obj_h()->bool_field(pivot_offset);
@@ -502,7 +502,7 @@ JRT_ENTRY(void, InterpreterRuntime::value_array_load(JavaThread* current, arrayO
   if (aklass->is_flatArray_klass()) {
     flatArrayHandle vah(current, (flatArrayOop)array);
     FlatArrayKlass* vaklass = FlatArrayKlass::cast(vah()->klass());
-    if (elm_klass->is_nullable_flattenable()) {
+    if (!elm_klass->is_null_free()) {
       // Pb: how to read the value of the pivot field of a flattened array element?
       // We trick the oopDesc method bool_field() which only requires an oop and an offset
       // the oop is the array and the offset is computed from the element index and the pivot offset
@@ -532,7 +532,7 @@ JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void*
     FlatArrayKlass* vaklass = FlatArrayKlass::cast(k);
     InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
     if (val == NULL) {
-      if (!elm_klass->is_nullable_flattenable()) {
+      if (elm_klass->is_null_free()) {
         THROW(vmSymbols::java_lang_NullPointerException());
       } else {
         // Writting null to a flat array of nullable flattenable
@@ -550,7 +550,7 @@ JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void*
     ObjArrayKlass* vaklass = ObjArrayKlass::cast(k);
     if (val == NULL) {
       InlineKlass* elm_klass = InlineKlass::cast(vaklass->element_klass());
-      if (!elm_klass->is_nullable_flattenable()) {
+      if (elm_klass->is_null_free()) {
         THROW(vmSymbols::java_lang_NullPointerException());
       }
     }
@@ -1042,7 +1042,7 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     }
   }
 
-  bool is_nullable_flattenable = false;
+  bool is_null_free = false;
   if (info.signature()->is_Q_signature()) {
     Klass* k = info.field_holder()->get_inline_type_field_klass_or_null(info.index());
     if (k == NULL) {
@@ -1057,7 +1057,7 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
           CHECK);
       assert(k != NULL, "Must have been loaded at this point!");
     }
-    is_nullable_flattenable = InstanceKlass::cast(k)->is_nullable_flattenable();
+    is_null_free = InstanceKlass::cast(k)->is_null_free();
   }
 
   cp_cache_entry->set_field(
@@ -1071,7 +1071,7 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
     info.access_flags().is_volatile(),
     info.is_inlined(),
     info.signature()->is_Q_signature() && info.is_inline_type(),
-    is_nullable_flattenable
+    is_null_free
   );
 
 }

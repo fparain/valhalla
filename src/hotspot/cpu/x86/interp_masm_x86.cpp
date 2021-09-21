@@ -1235,11 +1235,11 @@ void InterpreterMacroAssembler::allocate_instance(Register klass, Register new_o
   }
 }
 
-void InterpreterMacroAssembler::read_nullable_flattenable_field(Register holder_klass,
+void InterpreterMacroAssembler::read_nullable_flattened_field(Register holder_klass,
                             Register field_index, Register field_offset,
                             Register obj) {
 
-  call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::read_nullable_flattenable_field),
+  call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::read_nullable_flattened_field),
           obj, field_index, holder_klass);
 }
 
@@ -1300,7 +1300,7 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
                                                        Register t1, Register t2,
                                                        Register obj) {
   assert_different_registers(array, index, t1, t2);
-  Label alloc_failed, empty_value, done, nullable_flattenable_jmp;
+  Label alloc_failed, empty_value, done, nullable_flattened_jmp;
   const Register array_klass = t2;
   const Register elem_klass = t1;
   const Register alloc_temp = LP64_ONLY(rscratch1) NOT_LP64(rsi);
@@ -1312,7 +1312,7 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
   movptr(elem_klass, Address(array_klass, ArrayKlass::element_klass_offset()));
 
   // check for nullable flattenable klass
-  test_klass_is_nullable_flattenable(elem_klass, dst_temp, nullable_flattenable_jmp); // force slow path for nullable flattenable
+  test_klass_is_not_null_free(elem_klass, dst_temp, nullable_flattened_jmp); // force slow path for nullable flattened
 
   //check for empty value klass
   test_klass_is_empty_inline_type(elem_klass, dst_temp, empty_value);
@@ -1336,7 +1336,7 @@ void InterpreterMacroAssembler::read_flattened_element(Register array, Register 
 
   bind(alloc_failed);
   pop(index);
-  bind(nullable_flattenable_jmp);
+  bind(nullable_flattened_jmp);
   if (array == c_rarg2) {
     mov(elem_klass, array);
     array = elem_klass;

@@ -94,7 +94,7 @@ bool ciInlineKlass::is_empty() {
 }
 
 bool ciInlineKlass::is_nullable_flattenable() const {
-  GUARDED_VM_ENTRY(return to_InlineKlass()->is_nullable_flattenable();)
+  GUARDED_VM_ENTRY(return to_InlineKlass()->is_null_free();)
 }
 
 int ciInlineKlass::null_pivot_offset() const {

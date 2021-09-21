@@ -247,7 +247,7 @@ class InterpreterMacroAssembler: public MacroAssembler {
                             Register field_index, Register field_offset,
                             Register obj = rax);
 
-  void read_nullable_flattenable_field(Register holder_klass,
+  void read_nullable_flattened_field(Register holder_klass,
                             Register field_index, Register field_offset,
                             Register obj = rax);
 

@@ -288,7 +288,7 @@ class InstanceKlass: public Klass {
     _misc_invalid_identity_super              = 1 << 21, // invalid super type for an identity type
     _misc_has_injected_identityObject         = 1 << 22, // IdentityObject has been injected by the JVM
     _misc_has_injected_primitiveObject        = 1 << 23, // PrimitiveObject has been injected by the JVM
-    _misc_is_nullable_flattenable             = 1 << 24  // Flattened form must support the null value
+    _misc_is_null_free                        = 1 << 24  // if true, null is not part of the value set (inline types only)
   };
 
   // (*) An inline type is considered empty if it contains no non-static fields or
@@ -495,12 +495,12 @@ class InstanceKlass: public Klass {
     _misc_flags |= _misc_has_injected_primitiveObject;
   }
 
-  bool is_nullable_flattenable() const {
-    return (_misc_flags & _misc_is_nullable_flattenable);
+  bool is_null_free() const {
+    return (_misc_flags & _misc_is_null_free);
   }
 
-  void set_is_nullable_flattenable() {
-    _misc_flags |= _misc_is_nullable_flattenable;
+  void set_is_null_free() {
+    _misc_flags |= _misc_is_null_free;
   }
 
   // field sizes
@@ -698,7 +698,7 @@ public:
   static ByteSize kind_offset() { return in_ByteSize(offset_of(InstanceKlass, _kind)); }
   static ByteSize misc_flags_offset() { return in_ByteSize(offset_of(InstanceKlass, _misc_flags)); }
   static u4 misc_flag_is_empty_inline_type() { return _misc_is_empty_inline_type; }
-  static u4 misc_flag_is_nullable_flattenable() { return _misc_is_nullable_flattenable; }
+  static u4 misc_flag_is_null_free() { return _misc_is_null_free; }
 
   // initialization (virtuals from Klass)
   bool should_be_initialized() const;  // means that initialize should be called

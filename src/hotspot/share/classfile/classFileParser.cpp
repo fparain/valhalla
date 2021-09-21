@@ -937,7 +937,7 @@ void ClassFileParser::parse_interfaces(const ClassFileStream* stream,
             _class_name->as_klass_external_name());
           return;
         }
-        _is_nullable_flattenable = true;
+        _is_null_free = false;
       }
       _temp_local_interfaces->append(ik);
     }
@@ -1559,7 +1559,8 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
   // two more slots are required for inline classes:
   // one for the static field with a reference to the pre-allocated default value
   // one for the field the JVM injects when detecting an empty inline class
-  const int total_fields = length + num_injected + (is_inline_type ? 2 : 0) + (_is_nullable_flattenable ?  1 : 0);
+  // nullable inline types require one addition field: the pivot field injected by the VM to encode null
+  const int total_fields = length + num_injected + (is_inline_type ? 2 : 0) + (_is_null_free ?  0 : 1);
 
   // The field array starts with tuples of shorts
   // [access, name index, sig index, initial value index, byte offset].
@@ -1746,7 +1747,8 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
     index++;
   }
 
-  if (_is_nullable_flattenable) {
+  // Injection of a pivot fied for nullable inline types
+  if (is_inline_type && !_is_null_free) {
     FieldInfo* const field = FieldInfo::from_field_array(fa, index);
     field->initialize(JVM_ACC_FIELD_INTERNAL,
         (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(null_pivot_name)),
@@ -5612,8 +5614,8 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
     ik->set_has_injected_primitiveObject();
   }
 
-  if (_is_nullable_flattenable) {
-    ik->set_is_nullable_flattenable();
+  if (_is_null_free) {
+    ik->set_is_null_free();
   }
 
   assert(_fac != NULL, "invariant");
@@ -5780,7 +5782,7 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
   bool all_fields_empty = true;
   int nfields = ik->java_fields_count();
   if (ik->is_inline_klass()) nfields++;             // real number of fields should managed in a cleaner way
-  if (ik->is_nullable_flattenable()) nfields++;     //
+  if (is_inline_type() && !ik->is_null_free()) nfields++;               // add one for the pivot field
   for (int i = 0; i < nfields; i++) {
     if (((ik->field_access_flags(i) & JVM_ACC_STATIC) == 0)) {
       if (ik->field_is_null_free_inline_type(i)) {
@@ -5970,7 +5972,7 @@ ClassFileParser::ClassFileParser(ClassFileStream* stream,
   _has_injected_identityObject(false),
   _implements_primitiveObject(false),
   _has_injected_primitiveObject(false),
-  _is_nullable_flattenable(false),
+  _is_null_free(false),
   _has_finalizer(false),
   _has_empty_finalizer(false),
   _has_vanilla_constructor(false),
@@ -6172,6 +6174,10 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
   }
 
   _access_flags.set_flags(flags);
+
+  if (is_inline_type()) {
+    _is_null_free = true;  // Inline types are null free by default, this behavior can be changed with a marker interface
+  }
 
   // This class and superclass
   _this_class_index = stream->get_u2_fast();
