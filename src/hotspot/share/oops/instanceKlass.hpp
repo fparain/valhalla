@@ -140,7 +140,7 @@ class InlineKlassFixedBlock {
   address* _unpack_handler;
   int* _default_value_offset;
   int* _null_pivot_offset;
-  ArrayKlass** _null_free_inline_array_klasses;
+  ArrayKlass** _value_array_klasses;
   int _alignment;
   int _first_field_offset;
   int _exact_size_in_bytes;
@@ -566,7 +566,7 @@ class InstanceKlass: public Klass {
   Symbol* field_name        (int index) const { return field(index)->name(constants()); }
   Symbol* field_signature   (int index) const { return field(index)->signature(constants()); }
   bool    field_is_inlined(int index) const { return field(index)->is_inlined(); }
-  bool    field_is_null_free_inline_type(int index) const;
+  bool    field_is_inline_type(int index) const;
 
   // Number of Java declared fields
   int java_fields_count() const           { return (int)_java_fields_count; }

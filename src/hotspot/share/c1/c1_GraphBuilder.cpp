@@ -2469,7 +2469,7 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
   }
 
   Invoke* result = new Invoke(code, result_type, recv, args, target, state_before,
-                              declared_signature->returns_null_free_inline_type());
+                              declared_signature->returns_inline_type());
   // push result
   append_split(result);
 

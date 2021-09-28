@@ -2087,7 +2087,7 @@ const TypeTuple *TypeTuple::make_range(ciSignature* sig, bool ret_vt_fields) {
       field_array[pos++] = get_const_type(return_type); // Oop might be null when returning as fields
       collect_inline_fields(return_type->as_inline_klass(), field_array, pos);
     } else {
-      field_array[TypeFunc::Parms] = get_const_type(return_type)->join_speculative(sig->returns_null_free_inline_type() ? TypePtr::NOTNULL : TypePtr::BOTTOM);
+      field_array[TypeFunc::Parms] = get_const_type(return_type)->join_speculative(sig->returns_inline_type() ? TypePtr::NOTNULL : TypePtr::BOTTOM);
     }
     break;
   case T_VOID:
@@ -5886,7 +5886,7 @@ const TypeFunc* TypeFunc::make(ciMethod* method, bool is_osr_compilation) {
   const TypeTuple* domain_sig = is_osr_compilation ? osr_domain() : TypeTuple::make_domain(method, false);
   const TypeTuple* domain_cc = has_scalar_args ? TypeTuple::make_domain(method, true) : domain_sig;
   ciSignature* sig = method->signature();
-  bool has_scalar_ret = sig->returns_null_free_inline_type() && sig->return_type()->as_inline_klass()->can_be_returned_as_fields();
+  bool has_scalar_ret = sig->returns_inline_type() && sig->return_type()->as_inline_klass()->can_be_returned_as_fields();
   const TypeTuple* range_sig = TypeTuple::make_range(sig, false);
   const TypeTuple* range_cc = has_scalar_ret ? TypeTuple::make_range(sig, true) : range_sig;
   tf = TypeFunc::make(domain_sig, domain_cc, range_sig, range_cc);

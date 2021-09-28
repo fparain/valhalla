@@ -2887,22 +2887,22 @@ void MacroAssembler::test_non_null_free_array_oop(Register oop, Register temp_re
 }
 
 void MacroAssembler::test_flattened_array_layout(Register lh, Label& is_flattened_array) {
-  testl(lh, Klass::_lh_array_tag_vt_value_bit_inplace);
+  testl(lh, Klass::_lh_array_tag_flat_value_bit_inplace);
   jcc(Assembler::notZero, is_flattened_array);
 }
 
 void MacroAssembler::test_non_flattened_array_layout(Register lh, Label& is_non_flattened_array) {
-  testl(lh, Klass::_lh_array_tag_vt_value_bit_inplace);
+  testl(lh, Klass::_lh_array_tag_flat_value_bit_inplace);
   jcc(Assembler::zero, is_non_flattened_array);
 }
 
 void MacroAssembler::test_null_free_array_layout(Register lh, Label& is_null_free_array) {
-  testl(lh, Klass::_lh_null_free_bit_inplace);
+  testl(lh, Klass::_lh_null_free_array_bit_inplace);
   jcc(Assembler::notZero, is_null_free_array);
 }
 
 void MacroAssembler::test_non_null_free_array_layout(Register lh, Label& is_non_null_free_array) {
-  testl(lh, Klass::_lh_null_free_bit_inplace);
+  testl(lh, Klass::_lh_null_free_array_bit_inplace);
   jcc(Assembler::zero, is_non_null_free_array);
 }
 

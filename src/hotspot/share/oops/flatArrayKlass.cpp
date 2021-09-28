@@ -62,13 +62,22 @@ FlatArrayKlass::FlatArrayKlass(Klass* element_klass, Symbol* name) : ArrayKlass(
   set_class_loader_data(element_klass->class_loader_data());
 
   set_layout_helper(array_layout_helper(InlineKlass::cast(element_klass)));
+  assert(layout_helper_is_value_array(layout_helper()), "Sanity check");
+
   assert(is_array_klass(), "sanity");
   assert(is_flatArray_klass(), "sanity");
-  assert(is_null_free_array_klass(), "sanity");
+  assert(is_value_array_klass(), "sanity");
 
 #ifdef _LP64
-  set_prototype_header(markWord::flat_array_prototype());
-  assert(prototype_header().is_flat_array(), "sanity");
+  if (InlineKlass::cast(element_klass)->is_null_free()) {
+    set_prototype_header(markWord::null_free_flat_array_prototype());
+    assert(prototype_header().is_flat_array(), "sanity");
+    assert(prototype_header().is_null_free_array(), "sanity");
+  } else {
+    set_prototype_header(markWord::nullable_flat_array_prototype());
+    assert(prototype_header().is_flat_array(), "sanity");
+    assert(!prototype_header().is_null_free_array(), "sanity");
+  }
 #else
   set_prototype_header(markWord::inline_type_prototype());
 #endif
@@ -129,7 +138,7 @@ FlatArrayKlass* FlatArrayKlass::allocate_klass(Klass* eklass, TRAPS) {
           elem_super->array_klass(CHECK_NULL);
         }
         // Now retry from the beginning
-        ek = element_klass->null_free_inline_array_klass(CHECK_NULL);
+        ek = element_klass->value_array_klass(CHECK_NULL);
       }  // re-lock
       return FlatArrayKlass::cast(ek);
     }
@@ -178,14 +187,14 @@ jint FlatArrayKlass::array_layout_helper(InlineKlass* vk) {
   int esize = log2i_exact(round_up_power_of_2(vk->get_exact_size_in_bytes()));
   int hsize = arrayOopDesc::base_offset_in_bytes(etype);
 
-  int lh = Klass::array_layout_helper(_lh_array_tag_vt_value, true, hsize, etype, esize);
+  int lh = Klass::array_layout_helper(_lh_array_tag_flat_value, true, vk->is_null_free(), hsize, etype, esize);
 
   assert(lh < (int)_lh_neutral_value, "must look like an array layout");
   assert(layout_helper_is_array(lh), "correct kind");
   assert(layout_helper_is_flatArray(lh), "correct kind");
   assert(!layout_helper_is_typeArray(lh), "correct kind");
   assert(!layout_helper_is_objArray(lh), "correct kind");
-  assert(layout_helper_is_null_free(lh), "correct kind");
+  assert(layout_helper_is_value_array(lh), "correct kind");
   assert(layout_helper_header_size(lh) == hsize, "correct decode");
   assert(layout_helper_element_type(lh) == etype, "correct decode");
   assert(layout_helper_log2_element_size(lh) == esize, "correct decode");

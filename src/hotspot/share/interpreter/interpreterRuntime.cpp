@@ -318,7 +318,7 @@ JRT_ENTRY(int, InterpreterRuntime::withfield(JavaThread* current, ConstantPoolCa
       break;
     case atos:
       {
-        if (cpe->is_null_free_inline_type())  {
+        if (cpe->is_inline_type())  {
           int field_index = cpe->field_index();
           InlineKlass* field_ik = InlineKlass::cast(ik->get_inline_type_field_klass(field_index));
           if (ref_h() == NULL && field_ik->is_null_free()) {
@@ -489,7 +489,7 @@ JRT_ENTRY(void, InterpreterRuntime::anewarray(JavaThread* current, ConstantPool*
   arrayOop obj;
   if ((!klass->is_array_klass()) && is_qtype_desc) { // Logically creates elements, ensure klass init
     klass->initialize(CHECK);
-    obj = oopFactory::new_flatArray(klass, size, CHECK);
+    obj = oopFactory::new_valueArray(klass, size, CHECK);
   } else {
     obj = oopFactory::new_objArray(klass, size, CHECK);
   }
@@ -526,6 +526,8 @@ JRT_ENTRY(void, InterpreterRuntime::value_array_load(JavaThread* current, arrayO
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void* val, arrayOopDesc* array, int index))
+ResourceMark rm(THREAD);
+tty->print_cr("InterpreterRuntime::value_array_store");
   Klass* k = ((oopDesc*)array)->klass();
   if (k->is_flatArray_klass()) {
     flatArrayHandle vah(current, (flatArrayOop)array);

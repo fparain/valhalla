@@ -363,7 +363,7 @@ class ConstantPoolCacheEntry {
   bool is_field_entry() const                    { return (_flags & (1 << is_field_entry_shift))    != 0; }
   bool is_long() const                           { return flag_state() == ltos; }
   bool is_double() const                         { return flag_state() == dtos; }
-  bool is_null_free_inline_type() const          { return (_flags & (1 << is_inline_type_shift)) != 0; }
+  bool is_inline_type() const                    { return (_flags & (1 << is_inline_type_shift)) != 0; }
   TosState flag_state() const                    { assert((uint)number_of_states <= (uint)tos_state_mask+1, "");
                                                    return (TosState)((_flags >> tos_state_shift) & tos_state_mask); }
   void set_indy_resolution_failed();

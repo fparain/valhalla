@@ -1141,7 +1141,8 @@ void TemplateTable::dastore() {
 }
 
 void TemplateTable::aastore() {
-  Label is_null, is_flat_array, ok_is_subtype, done;
+  Label is_null, is_flat_array, ok_is_subtype, done, is_nullable_flattened;
+
   transition(vtos, vtos);
   // stack: ..., array, index, value
   __ movptr(rax, at_tos());    // value
@@ -1200,6 +1201,12 @@ void TemplateTable::aastore() {
 
     // No way to store null in null-free array
     __ test_null_free_array_oop(rdx, rbx, is_null_into_value_array_npe);
+    Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+    __ load_klass(rdi, rdx, tmp_load_klass);
+    if (UseFlatArray) {
+      __ movl(rbx, Address(rdi, Klass::layout_helper_offset()));
+      __ test_flattened_array_layout(rbx, is_nullable_flattened);
+    }
     __ jmp(store_null);
 
     __ bind(is_null_into_value_array_npe);
@@ -1235,7 +1242,6 @@ void TemplateTable::aastore() {
     // rdi: array klass
 
     // need special handling for nullable flattenable in order to update the pivot field
-    Label is_nullable_flattened;
     __ test_klass_is_not_null_free(rbx, rax, is_nullable_flattened);
 
     __ test_klass_is_empty_inline_type(rbx, rax, done);

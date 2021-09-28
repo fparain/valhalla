@@ -74,8 +74,8 @@ ciSignature::ciSignature(ciKlass* accessing_klass, const constantPoolHandle& cpo
 }
 
 // ------------------------------------------------------------------
-// ciSignature::returns_null_free_inline_type
-bool ciSignature::returns_null_free_inline_type() const {
+// ciSignature::returns_inline_type
+bool ciSignature::returns_inline_type() const {
   GUARDED_VM_ENTRY(return get_symbol()->is_Q_method_signature();)
 }
 

@@ -1735,19 +1735,7 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
     index++;
   }
 
-  if (is_inline_type && instance_fields_count == 0) {
-    _is_empty_inline_type = true;
-    FieldInfo* const field = FieldInfo::from_field_array(fa, index);
-    field->initialize(JVM_ACC_FIELD_INTERNAL,
-        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(empty_marker_name)),
-        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(byte_signature)),
-        0);
-    const BasicType type = Signature::basic_type(vmSymbols::byte_signature());
-    fac->update(false, type, false);
-    index++;
-  }
-
-  // Injection of a pivot fied for nullable inline types
+    // Injection of a pivot fied for nullable inline types
   if (is_inline_type && !_is_null_free) {
     FieldInfo* const field = FieldInfo::from_field_array(fa, index);
     field->initialize(JVM_ACC_FIELD_INTERNAL,
@@ -1755,6 +1743,19 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
         (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(bool_signature)),
         0);
     const BasicType type = Signature::basic_type(vmSymbols::bool_signature());
+    fac->update(false, type, false);
+    index++;
+  }
+
+  // for empty value types, inject a field only if not nullable (otherwise there's already a pivot field injected)
+  if (is_inline_type && instance_fields_count == 0 && _is_null_free) {
+    _is_empty_inline_type = true;
+    FieldInfo* const field = FieldInfo::from_field_array(fa, index);
+    field->initialize(JVM_ACC_FIELD_INTERNAL,
+        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(empty_marker_name)),
+        (u2)vmSymbols::as_int(VM_SYMBOL_ENUM_NAME(byte_signature)),
+        0);
+    const BasicType type = Signature::basic_type(vmSymbols::byte_signature());
     fac->update(false, type, false);
     index++;
   }
@@ -5783,9 +5784,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
   int nfields = ik->java_fields_count();
   if (ik->is_inline_klass()) nfields++;             // real number of fields should managed in a cleaner way
   if (is_inline_type() && !ik->is_null_free()) nfields++;               // add one for the pivot field
+  if (is_inline_type() && ik->is_empty_inline_type()) nfields++;
   for (int i = 0; i < nfields; i++) {
     if (((ik->field_access_flags(i) & JVM_ACC_STATIC) == 0)) {
-      if (ik->field_is_null_free_inline_type(i)) {
+      if (ik->field_is_inline_type(i)) {
         Symbol* klass_name = ik->field_signature(i)->fundamental_name(CHECK);
         // Inline classes for instance fields must have been pre-loaded
         // Inline classes for static fields might not have been loaded yet
@@ -5800,11 +5802,12 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
       } else {
         all_fields_empty = false;
       }
-    } else if (is_inline_type() && ((ik->field_access_flags(i) & JVM_ACC_FIELD_INTERNAL) != 0)) {
+    } else if (ik->field_name(i) == vmSymbols::default_value_name()) {
       InlineKlass::cast(ik)->set_default_value_offset(ik->field_offset(i));
     }
     if (ik->field_name(i) == vmSymbols::null_pivot_name()) {
       InlineKlass::cast(ik)->set_null_pivot_offset(ik->field_offset(i));
+      all_fields_empty = false;
     }
   }
 
