@@ -574,6 +574,15 @@ GrowableArray<ciField*>* ciInstanceKlass::compute_nonstatic_fields_impl(Growable
     fields->appendAll(super_fields);
   }
 
+  for (InternalFieldStream fs(k); !fs.done(); fs.next()) {
+    if (fs.name() == vmSymbols::null_pivot_name() && flatten) {
+      fieldDescriptor& fd = fs.field_descriptor();
+      ciField* field = new (arena) ciField(&fd);
+      fields->append(field);
+      flen += 1;
+    }
+  }
+
   for (JavaFieldStream fs(k); !fs.done(); fs.next()) {
     if (fs.access_flags().is_static())  continue;
     fieldDescriptor& fd = fs.field_descriptor();
@@ -829,6 +838,7 @@ void StaticFieldPrinter::do_field_helper(fieldDescriptor* fd, oop mirror, bool f
       assert(k != NULL && !HAS_PENDING_EXCEPTION, "can resolve klass?");
       InlineKlass* vk = InlineKlass::cast(k);
       oop obj;
+      // TODO
       if (flattened) {
         int field_offset = fd->offset() - vk->first_field_offset();
         obj = cast_to_oop(cast_from_oop<address>(mirror) + field_offset);

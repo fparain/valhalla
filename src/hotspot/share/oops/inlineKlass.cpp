@@ -179,7 +179,7 @@ Klass* InlineKlass::null_free_inline_array_klass(int n, TRAPS) {
         if (flatten_array()) {
           k = FlatArrayKlass::allocate_klass(this, CHECK_NULL);
         } else {
-          k = ObjArrayKlass::allocate_objArray_klass(class_loader_data(), 1, this, true, true, CHECK_NULL);
+          k = ObjArrayKlass::allocate_objArray_klass(class_loader_data(), 1, this, !is_nullable_flattenable(), true, CHECK_NULL);
 
         }
         // use 'release' to pair with lock-free load
@@ -246,6 +246,18 @@ void InlineKlass::array_klasses_do(void f(Klass* k, TRAPS), TRAPS) {
 int InlineKlass::collect_fields(GrowableArray<SigEntry>* sig, int base_off) {
   int count = 0;
   SigEntry::add_entry(sig, T_INLINE_TYPE, name(), base_off);
+
+  for (InternalFieldStream fs(this); !fs.done(); fs.next()) {
+    if (fs.name() == vmSymbols::null_pivot_name()) {
+      fieldDescriptor& fd = fs.field_descriptor();
+      int offset = base_off + fs.offset() - (base_off > 0 ? first_field_offset() : 0);
+      BasicType bt = Signature::basic_type(fs.signature());
+      // TODO explain why base_off == 0 check is required
+      SigEntry::add_entry(sig, bt, fs.signature(), offset, base_off == 0);
+      count += type2size[bt];
+    }
+  }
+
   for (JavaFieldStream fs(this); !fs.done(); fs.next()) {
     if (fs.access_flags().is_static()) continue;
     int offset = base_off + fs.offset() - (base_off > 0 ? first_field_offset() : 0);
@@ -390,20 +402,14 @@ void InlineKlass::restore_oop_results(RegisterMap& reg_map, GrowableArray<Handle
   int j = 1;
   for (int i = 0, k = 0; i < sig_vk->length(); i++) {
     BasicType bt = sig_vk->at(i)._bt;
-    if (bt == T_OBJECT || bt == T_ARRAY) {
+    if (bt == T_INLINE_TYPE || bt == T_VOID) {
+      continue;
+    } else if (bt == T_OBJECT || bt == T_ARRAY) {
       VMRegPair pair = regs->at(j);
       address loc = reg_map.location(pair.first());
       *(oop*)loc = handles.at(k++)();
     }
-    if (bt == T_INLINE_TYPE) {
-      continue;
-    }
-    if (bt == T_VOID &&
-        sig_vk->at(i-1)._bt != T_LONG &&
-        sig_vk->at(i-1)._bt != T_DOUBLE) {
-      continue;
-    }
-    j++;
+    j += type2size[bt];
   }
   assert(j == regs->length(), "missed a field?");
 }
@@ -411,22 +417,33 @@ void InlineKlass::restore_oop_results(RegisterMap& reg_map, GrowableArray<Handle
 // Fields are in registers. Create an instance of the inline type and
 // initialize it with the values of the fields.
 oop InlineKlass::realloc_result(const RegisterMap& reg_map, const GrowableArray<Handle>& handles, TRAPS) {
-  oop new_vt = allocate_instance(CHECK_NULL);
   const Array<SigEntry>* sig_vk = extended_sig();
   const Array<VMRegPair>* regs = return_regs();
 
+  if (is_nullable_flattenable()) {
+    for (int i = 0, j = 1; i < sig_vk->length(); i++) {
+      BasicType bt = sig_vk->at(i)._bt;
+      if (bt == T_INLINE_TYPE || bt == T_VOID) {
+        continue;
+      } else if (sig_vk->at(i)._is_pivot) {
+        assert(bt == T_BOOLEAN, "Unexpected pivot field type");
+        address loc = reg_map.location(regs->at(j).first());
+        jboolean is_valid = *(jboolean*)loc;
+        if (!is_valid) {
+          return oop();
+        }
+        break;
+      }
+      j += type2size[bt];
+    }
+  }
+
+  oop new_vt = allocate_instance(CHECK_NULL);
   int j = 1;
   int k = 0;
   for (int i = 0; i < sig_vk->length(); i++) {
     BasicType bt = sig_vk->at(i)._bt;
-    if (bt == T_INLINE_TYPE) {
-      continue;
-    }
-    if (bt == T_VOID) {
-      if (sig_vk->at(i-1)._bt == T_LONG ||
-          sig_vk->at(i-1)._bt == T_DOUBLE) {
-        j++;
-      }
+    if (bt == T_INLINE_TYPE || bt == T_VOID) {
       continue;
     }
     int off = sig_vk->at(i)._offset;
@@ -456,7 +473,7 @@ oop InlineKlass::realloc_result(const RegisterMap& reg_map, const GrowableArray<
     }
     case T_LONG: {
 #ifdef _LP64
-      new_vt->double_field_put(off,  *(jdouble*)loc);
+      new_vt->double_field_put(off, *(jdouble*)loc);
 #else
       Unimplemented();
 #endif
@@ -469,7 +486,7 @@ oop InlineKlass::realloc_result(const RegisterMap& reg_map, const GrowableArray<
       break;
     }
     case T_FLOAT: {
-      new_vt->float_field_put(off,  *(jfloat*)loc);
+      new_vt->float_field_put(off, *(jfloat*)loc);
       break;
     }
     case T_DOUBLE: {
@@ -480,7 +497,7 @@ oop InlineKlass::realloc_result(const RegisterMap& reg_map, const GrowableArray<
       ShouldNotReachHere();
     }
     *(intptr_t*)loc = 0xDEAD;
-    j++;
+    j += type2size[bt];
   }
   assert(j == regs->length(), "missed a field?");
   assert(k == handles.length(), "missed an oop?");

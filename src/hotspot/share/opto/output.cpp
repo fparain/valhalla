@@ -877,12 +877,12 @@ void PhaseOutput::FillLocArray( int idx, MachSafePointNode* sfpt, Node *local,
         Node* init_node = sfpt->in(first_ind++);
         assert(init_node != NULL, "is_init node not found");
         if (!init_node->is_top()) {
-          const Type* init_type = init_node->bottom_type();
+          const TypeInt* init_type = init_node->bottom_type()->is_int();
           if (init_node->is_Con()) {
-            is_init = new ConstantOopWriteValue(init_type->is_zero_type() ? 0 : init_type->isa_oopptr()->const_oop()->constant_encoding());
+            is_init = new ConstantIntValue(init_type->get_con());
           } else {
             OptoReg::Name init_reg = C->regalloc()->get_reg_first(init_node);
-            is_init = new_loc_value(C->regalloc(), init_reg, init_type->isa_narrowoop() ? Location::narrowoop : Location::oop);
+            is_init = new_loc_value(C->regalloc(), init_reg, Location::normal);
           }
         }
       }
@@ -3347,6 +3347,7 @@ void PhaseOutput::init_scratch_buffer_blob(int const_size) {
       // when loading object fields from the buffered argument. Increase scratch buffer size accordingly.
       int barrier_size = UseZGC ? 200 : (7 DEBUG_ONLY(+ 37));
       for (ciSignatureStream str(C->method()->signature()); !str.at_return_type(); str.next()) {
+        // TODO
         if (str.is_null_free() && str.type()->as_inline_klass()->can_be_passed_as_fields()) {
           size += str.type()->as_inline_klass()->oop_count() * barrier_size;
         }

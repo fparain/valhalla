@@ -921,8 +921,24 @@ static void gen_c2i_adapter(MacroAssembler *masm,
       // type delimiter for this inline type. Inline types are flattened
       // so we might encounter embedded inline types. Each entry in
       // sig_extended contains a field offset in the buffer.
+      Label L_null;
       do {
         next_arg_comp++;
+
+        if (sig_extended->at(next_arg_comp)._is_pivot) {
+          VMReg reg = regs[next_arg_comp-ignored].first();
+          Label L_OK;
+          if (reg->is_stack()) {
+            int ld_off = reg->reg2stack() * VMRegImpl::stack_slot_size + extraspace;
+            __ testb(Address(rsp, ld_off), 1);
+          } else {
+            __ testb(reg->as_Register(), 1);
+          }
+          __ jcc(Assembler::notZero, L_OK);
+          __ movptr(Address(rsp, st_off), 0);
+          __ jmp(L_null);
+          __ bind(L_OK);
+        }
         BasicType bt = sig_extended->at(next_arg_comp)._bt;
         BasicType prev_bt = sig_extended->at(next_arg_comp-1)._bt;
         if (bt == T_INLINE_TYPE) {
@@ -944,6 +960,7 @@ static void gen_c2i_adapter(MacroAssembler *masm,
       } while (vt != 0);
       // pass the buffer to the interpreter
       __ movptr(Address(rsp, st_off), r14);
+      __ bind(L_null);
     }
   }
 
@@ -4177,9 +4194,10 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
   __ resolve_jobject(rax /* value */,
                      r15_thread /* thread */,
                      r12 /* tmp */);
-  __ movptr(Address(r13, 0), rax);
 
   int pack_fields_off = __ offset();
+
+  Label L_null;
 
   int j = 1;
   for (int i = 0; i < sig_vk->length(); i++) {
@@ -4199,6 +4217,17 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
     VMRegPair pair = regs->at(j);
     VMReg r_1 = pair.first();
     VMReg r_2 = pair.second();
+
+
+    if (sig_vk->at(i)._is_pivot) {
+      Label L_OK;
+      __ testb(r_1->as_Register(), 1);
+      __ jcc(Assembler::notZero, L_OK);
+      __ xorq(rax, rax);
+      __ jmp(L_null);
+      __ bind(L_OK);
+    }
+
     Address to(rax, off);
     if (bt == T_FLOAT) {
       __ movflt(to, r_1->as_XMMRegister());
@@ -4208,7 +4237,7 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
       Register val = r_1->as_Register();
       assert_different_registers(to.base(), val, r14, r13, rbx, rscratch1);
       if (is_reference_type(bt)) {
-        __ store_heap_oop(to, val, r14, r13, rbx, IN_HEAP | ACCESS_WRITE | IS_DEST_UNINITIALIZED);
+        __ store_heap_oop(to, val, r14, rscratch1, rbx, IN_HEAP | ACCESS_WRITE | IS_DEST_UNINITIALIZED);
       } else {
         __ store_sized_value(to, r_1->as_Register(), type2aelembytes(bt));
       }
@@ -4217,6 +4246,7 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
   }
   assert(j == regs->length(), "missed a field?");
 
+  __ bind(L_null);
   __ ret(0);
 
   int unpack_fields_off = __ offset();
@@ -4239,6 +4269,7 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
     VMRegPair pair = regs->at(j);
     VMReg r_1 = pair.first();
     VMReg r_2 = pair.second();
+
     Address from(rax, off);
     if (bt == T_FLOAT) {
       __ movflt(r_1->as_XMMRegister(), from);
@@ -4251,7 +4282,12 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
       assert(is_java_primitive(bt), "unexpected basic type");
       assert_different_registers(rax, r_1->as_Register());
       size_t size_in_bytes = type2aelembytes(bt);
-      __ load_sized_value(r_1->as_Register(), from, size_in_bytes, bt != T_CHAR && bt != T_BOOLEAN);
+      if (sig_vk->at(i)._is_pivot) {
+        assert(bt == T_BOOLEAN, "Unexpected pivot field type");
+        __ movq(r_1->as_Register(), 1);
+      } else {
+        __ load_sized_value(r_1->as_Register(), from, size_in_bytes, bt != T_CHAR && bt != T_BOOLEAN);
+      }
     }
     j++;
   }

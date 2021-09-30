@@ -861,10 +861,10 @@ JVMState* Compile::build_start_state(StartNode* start, const TypeFunc* tf) {
   }
   PhaseGVN& gvn = *initial_gvn();
   uint i = 0;
-  for (uint j = 0; i < (uint)arg_size; i++) {
+  for (uint j = 0, sIdx = 0; i < (uint)arg_size; i++) {
     const Type* t = tf->domain_sig()->field_at(i);
     Node* parm = NULL;
-    if (has_scalarized_args() && t->is_inlinetypeptr() && !t->maybe_null() && t->inline_klass()->can_be_passed_as_fields()) {
+    if (!is_osr_compilation() && i >= TypeFunc::Parms && t != Type::HALF && method()->is_scalarized_arg(sIdx++)) {
       // Inline type arguments are not passed by reference: we get an argument per
       // field of the inline type. Build InlineTypeNodes from the inline type arguments.
       GraphKit kit(jvms, &gvn);
@@ -922,6 +922,14 @@ void Compile::return_values(JVMState* jvms) {
       // Multiple return values (inline type fields): add as many edges
       // to the Return node as returned values.
       InlineTypeBaseNode* vt = res->as_InlineTypeBase();
+      if (method()->signature()->returns_null_free_inline_type()) {
+        const Type* tinit = kit.gvn().type(vt->get_is_init());
+        if (!tinit->isa_int() || !tinit->is_int()->is_con(1)) {
+          // TODO add the same asserts to other places
+        //  vt->dump(4);
+       //   assert(false, "should be non-null");
+        }
+      }
       ret->add_req_batch(NULL, tf()->range_cc()->cnt() - TypeFunc::Parms);
       if (vt->is_allocated(&kit.gvn()) && !StressInlineTypeReturnedAsFields) {
         ret->init_req(TypeFunc::Parms, vt->get_oop());
@@ -2370,7 +2378,7 @@ void Parse::return_current(Node* value) {
     if (return_type->isa_inlinetype()) {
       // Inline type is returned as fields, make sure it is scalarized
       if (!value->is_InlineType()) {
-        value = InlineTypeNode::make_from_oop(this, value, return_type->inline_klass());
+        value = InlineTypeNode::make_from_oop(this, value, return_type->inline_klass(), !return_type->inline_klass()->is_nullable_flattenable());
       }
       if (!_caller->has_method() || Compile::current()->inlining_incrementally()) {
         // Returning from root or an incrementally inlined method. Make sure all non-flattened

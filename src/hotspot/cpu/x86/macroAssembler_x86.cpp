@@ -5657,24 +5657,36 @@ bool MacroAssembler::unpack_inline_helper(const GrowableArray<SigEntry>* sig, in
     fromReg = r10;
   }
 
+  Label L_null, L_notNull;
+
+  // TODO we should only null check if there is work left
+  // TODO we only need a null check if the arg is nullable (check for pivot field?)
+  bool null_check = reg_state[from->value()] != reg_written;
+  if (null_check) {
+    testptr(fromReg, fromReg);
+    jcc(Assembler::zero, L_null);
+  }
+
   ScalarizedInlineArgsStream stream(sig, sig_index, to, to_count, to_index, -1);
-  bool done = true;
-  bool mark_done = true;
   VMReg toReg;
   BasicType bt;
+  bool done = true;
+  bool mark_done = true;
   while (stream.next(toReg, bt)) {
     assert(toReg->is_valid(), "destination must be valid");
     int off = sig->at(stream.sig_index())._offset;
+    bool is_pivot = sig->at(stream.sig_index())._is_pivot;
+
     assert(off > 0, "offset in object should be positive");
     Address fromAddr = Address(fromReg, off);
 
     int idx = (int)toReg->value();
     if (reg_state[idx] == reg_readonly) {
-     if (idx != from->value()) {
-       mark_done = false;
-     }
-     done = false;
-     continue;
+      if (idx != from->value()) {
+        mark_done = false;
+      }
+      done = false;
+      continue;
     } else if (reg_state[idx] == reg_written) {
       continue;
     } else {
@@ -5688,7 +5700,12 @@ bool MacroAssembler::unpack_inline_helper(const GrowableArray<SigEntry>* sig, in
         load_heap_oop(dst, fromAddr);
       } else {
         bool is_signed = (bt != T_CHAR) && (bt != T_BOOLEAN);
-        load_sized_value(dst, fromAddr, type2aelembytes(bt), is_signed);
+        if (is_pivot) {
+          assert(bt == T_BOOLEAN, "Unexpected pivot field type");
+          movq(dst, 1);
+        } else {
+          load_sized_value(dst, fromAddr, type2aelembytes(bt), is_signed);
+        }
       }
       if (toReg->is_stack()) {
         int st_off = toReg->reg2stack() * VMRegImpl::stack_slot_size + wordSize;
@@ -5701,6 +5718,40 @@ bool MacroAssembler::unpack_inline_helper(const GrowableArray<SigEntry>* sig, in
       movflt(toReg->as_XMMRegister(), fromAddr);
     }
   }
+  if (null_check) {
+    if (done) {
+      jmp(L_notNull);
+      bind(L_null);
+
+      // Set all fields to 0
+      ScalarizedInlineArgsStream stream1(sig, sig_index, to, to_count, to_index, -1);
+      bool found = false;
+      while (stream1.next(toReg, bt)) {
+        assert(toReg->is_valid(), "destination must be valid");
+        assert(reg_state[(int)toReg->value()] == reg_written, "unexpected state");
+
+        // TODO double check if this is correct
+        if (!toReg->is_XMMRegister()) {
+          if (toReg->is_stack()) {
+            int st_off = toReg->reg2stack() * VMRegImpl::stack_slot_size + wordSize;
+            movq(Address(rsp, st_off), 0);
+          } else {
+            xorq(toReg->as_Register(), toReg->as_Register());
+          }
+        } else if (bt == T_DOUBLE) {
+          xorpd(toReg->as_XMMRegister(), toReg->as_XMMRegister());
+        } else {
+          assert(bt == T_FLOAT, "must be float");
+          xorps(toReg->as_XMMRegister(), toReg->as_XMMRegister());
+        }
+      }
+
+      bind(L_notNull);
+    } else {
+      bind(L_null);
+    }
+  }
+
   sig_index = stream.sig_index();
   to_index = stream.regs_index();
 
@@ -5740,12 +5791,33 @@ bool MacroAssembler::pack_inline_helper(const GrowableArray<SigEntry>* sig, int&
     val_obj = val_obj_tmp;
   }
 
+  // TODO this is only used for C1, right?
+//  assert(false, "FAIL");
+  movq(val_obj, 0);
+  Label L_null;
+  ScalarizedInlineArgsStream stream1(sig, sig_index, from, from_count, from_index);
+  VMReg fromReg;
+  BasicType bt;
+  bool found = false;
+  while (stream1.next(fromReg, bt)) {
+    assert(fromReg->is_valid(), "source must be valid");
+    if (sig->at(stream1.sig_index())._is_pivot) {
+      assert(!found, "multiple pivots found");
+      found = true;
+      if (fromReg->is_stack()) {
+        int st_off = fromReg->reg2stack() * VMRegImpl::stack_slot_size + wordSize;
+        testb(Address(rsp, st_off), 1);
+      } else {
+        testb(fromReg->as_Register(), 1);
+      }
+      jcc(Assembler::zero, L_null);
+    }
+  }
+
   int index = arrayOopDesc::base_offset_in_bytes(T_OBJECT) + vtarg_index * type2aelembytes(T_INLINE_TYPE);
   load_heap_oop(val_obj, Address(val_array, index));
 
   ScalarizedInlineArgsStream stream(sig, sig_index, from, from_count, from_index);
-  VMReg fromReg;
-  BasicType bt;
   while (stream.next(fromReg, bt)) {
     assert(fromReg->is_valid(), "source must be valid");
     int off = sig->at(stream.sig_index())._offset;
@@ -5776,6 +5848,8 @@ bool MacroAssembler::pack_inline_helper(const GrowableArray<SigEntry>* sig, int&
     }
     reg_state[fromReg->value()] = reg_writable;
   }
+  bind(L_null);
+
   sig_index = stream.sig_index();
   from_index = stream.regs_index();
 

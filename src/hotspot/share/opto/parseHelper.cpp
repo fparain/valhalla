@@ -69,7 +69,7 @@ void GraphKit::make_dtrace_method_entry_exit(ciMethod* method, bool is_entry) {
 void Parse::do_checkcast() {
   bool will_link;
   ciKlass* klass = iter().get_klass(will_link);
-  bool null_free = iter().has_Q_signature();
+  bool null_free = iter().has_Q_signature() && !klass->as_inline_klass()->is_nullable_flattenable();
   Node *obj = peek();
 
   // Throw uncommon trap if class is not loaded or the value we are casting
@@ -77,7 +77,7 @@ void Parse::do_checkcast() {
   // then the checkcast does nothing.
   const TypeOopPtr *tp = _gvn.type(obj)->isa_oopptr();
   if (!will_link || (tp && tp->klass() && !tp->klass()->is_loaded())) {
-    assert(!null_free, "Inline type should be loaded");
+    assert(!iter().has_Q_signature(), "Inline type should be loaded");
     if (C->log() != NULL) {
       if (!will_link) {
         C->log()->elem("assert_null reason='checkcast' klass='%d'",
@@ -355,7 +355,7 @@ void Parse::do_withfield() {
     // Scalarize inline type field value
     assert(!field->is_null_free() || !gvn().type(val)->maybe_null(), "Null store to null-free field");
     val = InlineTypeNode::make_from_oop(this, val, field->type()->as_inline_klass(), field->is_null_free());
-  } else if (val->is_InlineType() && !field->is_null_free()) {
+  } else if (val->is_InlineType() && !field->is_null_free() && !field->is_flattened()) {
     // Field value needs to be allocated because it can be merged with an oop.
     // Re-execute withfield if buffering triggers deoptimization.
     PreserveReexecuteState preexecs(this);

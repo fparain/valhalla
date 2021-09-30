@@ -117,7 +117,7 @@ void Parse::array_load(BasicType bt) {
         // Element type is known, cast and load from flattened representation
         ciInlineKlass* vk = elemptr->inline_klass();
         assert(vk->flatten_array() && elemptr->maybe_null(), "never/always flat - should be optimized");
-        ciArrayKlass* array_klass = ciArrayKlass::make(vk, /* null_free */ true);
+        ciArrayKlass* array_klass = ciArrayKlass::make(vk, /* null_free */ !vk->is_nullable_flattenable());
         const TypeAryPtr* arytype = TypeOopPtr::make_from_klass(array_klass)->isa_aryptr();
         Node* cast = _gvn.transform(new CheckCastPPNode(control(), ary, arytype));
         Node* casted_adr = array_element_address(cast, idx, T_INLINE_TYPE, ary_t->size(), control());
@@ -125,7 +125,7 @@ void Parse::array_load(BasicType bt) {
         PreserveReexecuteState preexecs(this);
         jvms()->set_should_reexecute(true);
         inc_sp(2);
-        Node* vt = InlineTypeNode::make_from_flattened(this, vk, cast, casted_adr)->buffer(this, false);
+        Node* vt = InlineTypeNode::make_from_flattened(this, vk, cast, casted_adr)->as_InlineType()->buffer(this, false);
         ideal.set(res, vt);
         ideal.sync_kit(this);
       } else {
@@ -332,7 +332,7 @@ void Parse::array_store(BasicType bt) {
           // Element type is known, cast and store to flattened representation
           sync_kit(ideal);
           assert(vk->flatten_array() && elemtype->maybe_null(), "never/always flat - should be optimized");
-          ciArrayKlass* array_klass = ciArrayKlass::make(vk, /* null_free */ true);
+          ciArrayKlass* array_klass = ciArrayKlass::make(vk, /* null_free */ !vk->is_nullable_flattenable());
           const TypeAryPtr* arytype = TypeOopPtr::make_from_klass(array_klass)->isa_aryptr();
           casted_ary = _gvn.transform(new CheckCastPPNode(control(), casted_ary, arytype));
           Node* casted_adr = array_element_address(casted_ary, idx, T_OBJECT, arytype->size(), control());
@@ -2143,6 +2143,16 @@ void Parse::do_acmp(BoolTest::mask btest, Node* left, Node* right) {
   const TypeOopPtr* tright = _gvn.type(right)->isa_oopptr();
   Node* cmp = CmpP(left, right);
   cmp = optimize_cmp_with_klass(cmp);
+
+
+  // TODO remove
+  if (left->is_InlineTypeBase() && _gvn.type(left->as_InlineTypeBase()->get_is_init())->is_int()->is_con(0)) {
+    tleft = NULL;
+  }
+  if (right->is_InlineTypeBase() && _gvn.type(right->as_InlineTypeBase()->get_is_init())->is_int()->is_con(0)) {
+    tright = NULL;
+  }
+
   if (tleft == NULL || !tleft->can_be_inline_type() ||
       tright == NULL || !tright->can_be_inline_type()) {
     // This is sufficient, if one of the operands can't be an inline type
@@ -3431,7 +3441,9 @@ void Parse::do_one_bytecode() {
     b = pop();
     if (b->is_InlineType()) {
       // Return constant false because 'b' is always non-null
-      c = _gvn.makecon(TypeInt::CC_GT);
+      // TODO
+      //c = _gvn.makecon(TypeInt::CC_GT);
+      c = _gvn.transform(new CmpINode(b->as_InlineType()->get_is_init(), zerocon(T_INT)));
     } else {
       if (!_gvn.type(b)->speculative_maybe_null() &&
           !too_many_traps(Deoptimization::Reason_speculate_null_check)) {

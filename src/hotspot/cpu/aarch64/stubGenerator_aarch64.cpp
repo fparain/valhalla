@@ -387,6 +387,7 @@ class StubGenerator: public StubCodeGenerator {
       __ ldr(rscratch1, Address(rscratch1, InstanceKlass::adr_inlineklass_fixed_block_offset()));
       __ ldr(rscratch1, Address(rscratch1, InlineKlass::pack_handler_jobject_offset()));
       __ blr(rscratch1);
+      __ str(r0, Address(Rresult));
       __ b(exit);
     }
 

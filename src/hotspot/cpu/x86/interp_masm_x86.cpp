@@ -1184,6 +1184,17 @@ void InterpreterMacroAssembler::remove_activation(
     cmpl(rdi, T_INLINE_TYPE);
     jcc(Assembler::notEqual, skip);
 
+    // TODO we need to set the pivot field to 0!
+    xorq(j_rarg5, j_rarg5);
+    xorq(j_rarg4, j_rarg4);
+    xorq(j_rarg3, j_rarg3);
+    xorq(j_rarg2, j_rarg2);
+    xorq(j_rarg1, j_rarg1);
+    xorq(j_rarg0, j_rarg0);
+
+    testptr(rax, rax);
+    jcc(Assembler::zero, skip);
+
     // We are returning an inline type, load its fields into registers
 #ifndef _LP64
     super_call_VM_leaf(StubRoutines::load_inline_type_fields_in_regs());

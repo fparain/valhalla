@@ -1244,7 +1244,7 @@ Node* LoadNode::Identity(PhaseGVN* phase) {
   InlineTypePtrNode* vt = (base != NULL) ? base->uncast()->isa_InlineTypePtr() : NULL;
   if (vt != NULL && offset > oopDesc::klass_offset_in_bytes()) {
     Node* value = vt->field_value_by_offset((int)offset, true);
-    if (value->is_InlineType()) {
+    if (value != NULL && value->is_InlineType()) {
       // Non-flattened inline type field
       InlineTypeNode* vt = value->as_InlineType();
       if (vt->is_allocated(phase)) {
@@ -2398,6 +2398,7 @@ const Type* LoadNode::klass_value_common(PhaseGVN* phase) const {
             // klass.  Users of this result need to do a null check on the returned klass.
             return TypePtr::NULL_PTR;
           }
+          // TODO
           return TypeKlassPtr::make(ciArrayKlass::make(t, null_free));
         }
         if (!t->is_klass()) {

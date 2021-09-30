@@ -241,6 +241,7 @@ JVMState* VirtualCallGenerator::generate(JVMState* jvms) {
   // correctly, but may bail out in final_graph_reshaping, because
   // the call instruction will have a seemingly deficient out-count.
   // (The bailout says something misleading about an "infinite loop".)
+  // TODO
   if (!receiver->is_InlineType() && kit.gvn().type(receiver)->higher_equal(TypePtr::NULL_PTR)) {
     assert(Bytecodes::is_invoke(kit.java_bc()), "%d: %s", kit.java_bc(), Bytecodes::name(kit.java_bc()));
     ciMethod* declared_method = kit.method()->get_method_at_bci(kit.bci());
@@ -750,9 +751,9 @@ void CallGenerator::do_late_inline_helper() {
     assert(domain_sig->cnt() - TypeFunc::Parms == nargs, "inconsistent signature");
 
     uint j = TypeFunc::Parms;
-    for (uint i1 = 0; i1 < nargs; i1++) {
+    for (uint i1 = 0, sIdx = 0; i1 < nargs; i1++) {
       const Type* t = domain_sig->field_at(TypeFunc::Parms + i1);
-      if (method()->has_scalarized_args() && t->is_inlinetypeptr() && !t->maybe_null() && t->inline_klass()->can_be_passed_as_fields()) {
+      if (t != Type::HALF && method()->is_scalarized_arg(sIdx++)) {
         // Inline type arguments are not passed by reference: we get an argument per
         // field of the inline type. Build InlineTypeNodes from the inline type arguments.
         GraphKit arg_kit(jvms, &gvn);
@@ -826,11 +827,11 @@ void CallGenerator::do_late_inline_helper() {
     C->set_do_cleanup(kit.stopped()); // path is dead; needs cleanup
 
     // Handle inline type returns
-    InlineTypeNode* vt = result->isa_InlineType();
+    InlineTypeBaseNode* vt = result->isa_InlineTypeBase();
     if (vt != NULL) {
       if (call->tf()->returns_inline_type_as_fields()) {
         vt->replace_call_results(&kit, call, C);
-      } else {
+      } else if (!vt->isa_InlineTypePtr()) {
         // Result might still be allocated (for example, if it has been stored to a non-flattened field)
         if (!vt->is_allocated(&kit.gvn())) {
           assert(buffer_oop != NULL, "should have allocated a buffer");

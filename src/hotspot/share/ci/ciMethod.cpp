@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "ci/ciCallProfile.hpp"
 #include "ci/ciExceptionHandler.hpp"
+#include "ci/ciInlineKlass.hpp"
 #include "ci/ciInstanceKlass.hpp"
 #include "ci/ciMethod.hpp"
 #include "ci/ciMethodBlocks.hpp"
@@ -1511,6 +1512,18 @@ bool ciMethod::is_consistent_info(ciMethod* declared_method, ciMethod* resolved_
 bool ciMethod::has_scalarized_args() const {
   VM_ENTRY_MARK;
   return get_Method()->has_scalarized_args();
+}
+
+bool ciMethod::is_scalarized_arg(uint idx) const {
+  if (!has_scalarized_args()) return false;
+  if (idx == 0 && !is_static()) {
+    return holder()->is_inlinetype() && holder()->as_inline_klass()->can_be_passed_as_fields();
+  } else {
+    if (!is_static()) {
+      idx--;
+    }
+    return signature()->is_Q_type_at(idx) && signature()->type_at(idx)->as_inline_klass()->can_be_passed_as_fields();
+  }
 }
 
 const GrowableArray<SigEntry>* ciMethod::get_sig_cc() {

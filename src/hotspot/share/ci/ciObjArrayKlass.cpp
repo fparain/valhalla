@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "ci/ciInlineKlass.hpp"
 #include "ci/ciInstanceKlass.hpp"
 #include "ci/ciObjArrayKlass.hpp"
 #include "ci/ciSymbol.hpp"
@@ -54,7 +55,7 @@ ciObjArrayKlass::ciObjArrayKlass(Klass* k) : ciArrayKlass(k) {
   if (!ciObjectFactory::is_initialized()) {
     assert(_element_klass->is_java_lang_Object(), "only arrays of object are shared");
   }
-  _null_free = k->name()->is_Q_array_signature() && k->name()->char_at(1) == JVM_SIGNATURE_INLINE_TYPE;
+  _null_free = k->name()->is_Q_array_signature() && k->name()->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && !_element_klass->as_inline_klass()->is_nullable_flattenable();
 }
 
 // ------------------------------------------------------------------
@@ -75,7 +76,7 @@ ciObjArrayKlass::ciObjArrayKlass(ciSymbol* array_name,
   } else {
     _element_klass = NULL;
   }
-  _null_free = array_name->is_Q_array_signature() && array_name->char_at(1) == JVM_SIGNATURE_INLINE_TYPE;
+  _null_free = array_name->is_Q_array_signature() && array_name->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && !_element_klass->as_inline_klass()->is_nullable_flattenable();
 }
 
 // ------------------------------------------------------------------

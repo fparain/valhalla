@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "ci/ciEnv.hpp"
+#include "ci/ciInlineKlass.hpp"
 #include "ci/ciType.hpp"
 #include "ci/ciUtilities.inline.hpp"
 #include "memory/resourceArea.hpp"
@@ -140,4 +141,10 @@ void ciReturnAddress::print_impl(outputStream* st) {
 // ciReturnAddress::make
 ciReturnAddress* ciReturnAddress::make(int bci) {
   GUARDED_VM_ENTRY(return CURRENT_ENV->get_return_address(bci);)
+}
+
+// ------------------------------------------------------------------
+// ciWrapper::is_null_free
+bool ciWrapper::is_null_free() const {
+  return !_type->as_inline_klass()->is_nullable_flattenable();
 }

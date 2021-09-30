@@ -560,7 +560,9 @@ void Parse::do_call() {
     Node* receiver_node             = stack(sp() - nargs);
     const TypeOopPtr* receiver_type = NULL;
     if (receiver_node->is_InlineType()) {
-      receiver_type = TypeInstPtr::make(TypePtr::NotNull, _gvn.type(receiver_node)->inline_klass());
+      // TODO
+      //receiver_type = TypeInstPtr::make(TypePtr::NotNull, _gvn.type(receiver_node)->inline_klass());
+      receiver_type = TypeInstPtr::make(TypePtr::BotPTR, _gvn.type(receiver_node)->inline_klass());
     } else {
       receiver_type = _gvn.type(receiver_node)->isa_oopptr();
     }

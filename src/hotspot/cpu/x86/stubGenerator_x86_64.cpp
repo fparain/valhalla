@@ -431,6 +431,7 @@ class StubGenerator: public StubCodeGenerator {
       __ movptr(rbx, Address(rax, InlineKlass::pack_handler_jobject_offset()));
       // Call pack handler to initialize the buffer
       __ call(rbx);
+      __ movptr(Address(r13, 0), rax);
       __ jmp(exit);
     }
     __ BIND(is_long);

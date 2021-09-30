@@ -620,7 +620,7 @@ void ciTypeFlow::StateVector::do_aload(ciBytecodeStream* str) {
 void ciTypeFlow::StateVector::do_checkcast(ciBytecodeStream* str) {
   bool will_link;
   ciKlass* klass = str->get_klass(will_link);
-  bool null_free = str->has_Q_signature();
+  bool null_free = str->has_Q_signature() && !klass->as_inline_klass()->is_nullable_flattenable();
   if (!will_link) {
     if (null_free) {
       trap(str, klass,
@@ -1002,7 +1002,7 @@ bool ciTypeFlow::StateVector::apply_one_bytecode(ciBytecodeStream* str) {
       if (!will_link) {
         trap(str, element_klass, str->get_klass_index());
       } else {
-        bool null_free = str->has_Q_signature();
+        bool null_free = str->has_Q_signature() && !element_klass->as_inline_klass()->is_nullable_flattenable();
         push_object(ciArrayKlass::make(element_klass, null_free));
       }
       break;
@@ -3083,7 +3083,7 @@ void ciTypeFlow::record_failure(const char* reason) {
 
 ciType* ciTypeFlow::mark_as_null_free(ciType* type) {
   // Wrap the type to carry the information that it is null-free
-  return env()->make_null_free_wrapper(type);
+  return env()->make_wrapper(type);
 }
 
 #ifndef PRODUCT

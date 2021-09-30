@@ -3382,7 +3382,6 @@ BufferedInlineTypeBlob* SharedRuntime::generate_buffered_inline_type_adapter(con
   __ resolve_jobject(r0 /* value */,
                      rthread /* thread */,
                      r12 /* tmp */);
-  __ str(r0, Address(Rresult));
 
   int pack_fields_off = __ offset();
 

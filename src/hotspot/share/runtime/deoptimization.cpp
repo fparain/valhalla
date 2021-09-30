@@ -1063,8 +1063,9 @@ bool Deoptimization::realloc_objects(JavaThread* thread, frame* fr, RegisterMap*
     // to be checked before using the field values. Skip re-allocation if it is null.
     if (sv->maybe_null()) {
       assert(k->is_inline_klass(), "must be an inline klass");
-      StackValue* init_value = StackValue::create_stack_value(fr, reg_map, sv->is_init());
-      if (init_value->get_obj().is_null()) {
+      intptr_t init_value = StackValue::create_stack_value(fr, reg_map, sv->is_init())->get_int();
+      jint is_init = (jint)*((jint*)&init_value);
+      if (is_init == 0) {
         continue;
       }
     }
@@ -1131,10 +1132,11 @@ bool Deoptimization::realloc_objects(JavaThread* thread, frame* fr, RegisterMap*
 // the register values here.
 bool Deoptimization::realloc_inline_type_result(InlineKlass* vk, const RegisterMap& map, GrowableArray<Handle>& return_oops, TRAPS) {
   oop new_vt = vk->realloc_result(map, return_oops, THREAD);
-  if (new_vt == NULL) {
+  if (new_vt == NULL && HAS_PENDING_EXCEPTION) {
     CLEAR_PENDING_EXCEPTION;
     THROW_OOP_(Universe::out_of_memory_error_realloc_objects(), true);
   }
+  assert(new_vt != NULL || vk->is_nullable_flattenable(), "Unexpected re-allocation failure");
   return_oops.clear();
   return_oops.push(Handle(THREAD, new_vt));
   return false;
@@ -1332,7 +1334,9 @@ static int reassign_fields_by_klass(InstanceKlass* klass, frame* fr, RegisterMap
   InstanceKlass* ik = klass;
   while (ik != NULL) {
     for (AllFieldStream fs(ik); !fs.done(); fs.next()) {
-      if (!fs.access_flags().is_static() && (!skip_internal || !fs.access_flags().is_internal())) {
+      bool is_pivot = ik->is_inline_klass() && InlineKlass::cast(ik)->is_nullable_flattenable() &&
+                      fs.offset() == InlineKlass::cast(ik)->null_pivot_offset();
+      if (!fs.access_flags().is_static() && (!skip_internal || !fs.access_flags().is_internal() || is_pivot)) {
         ReassignedField field;
         field._offset = fs.offset();
         field._type = Signature::basic_type(fs.signature());

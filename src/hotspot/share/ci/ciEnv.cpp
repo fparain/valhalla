@@ -475,7 +475,7 @@ ciKlass* ciEnv::get_klass_by_name_impl(ciKlass* accessing_klass,
                              require_local);
     if (elem_klass != NULL && elem_klass->is_loaded()) {
       // Now make an array for it
-      bool null_free_array = sym->is_Q_array_signature() && sym->char_at(1) == JVM_SIGNATURE_INLINE_TYPE;
+      bool null_free_array = sym->is_Q_array_signature() && sym->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && !elem_klass->as_inline_klass()->is_nullable_flattenable();
       return ciArrayKlass::make(elem_klass, null_free_array);
     }
   }

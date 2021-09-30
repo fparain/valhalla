@@ -586,12 +586,13 @@ class SigEntry {
   BasicType _bt;
   int _offset;
   Symbol* _symbol;
+  bool _is_pivot;
 
   SigEntry()
-    : _bt(T_ILLEGAL), _offset(-1), _symbol(NULL) {}
+    : _bt(T_ILLEGAL), _offset(-1), _symbol(NULL), _is_pivot(false) {}
 
-  SigEntry(BasicType bt, int offset, Symbol* symbol)
-    : _bt(bt), _offset(offset), _symbol(symbol) {}
+  SigEntry(BasicType bt, int offset, Symbol* symbol, bool is_pivot = false)
+    : _bt(bt), _offset(offset), _symbol(symbol), _is_pivot(is_pivot) {}
 
   static int compare(SigEntry* e1, SigEntry* e2) {
     if (e1->_offset != e2->_offset) {
@@ -615,7 +616,7 @@ class SigEntry {
     ShouldNotReachHere();
     return 0;
   }
-  static void add_entry(GrowableArray<SigEntry>* sig, BasicType bt, Symbol* symbol, int offset = -1);
+  static void add_entry(GrowableArray<SigEntry>* sig, BasicType bt, Symbol* symbol, int offset = -1, bool is_pivot = false);
   static bool skip_value_delimiters(const GrowableArray<SigEntry>* sig, int i);
   static int fill_sig_bt(const GrowableArray<SigEntry>* sig, BasicType* sig_bt);
   static TempNewSymbol create_symbol(const GrowableArray<SigEntry>* sig);

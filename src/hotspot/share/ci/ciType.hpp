@@ -73,6 +73,7 @@ public:
   bool is_classless() const                 { return is_primitive_type(); }
 
   virtual ciType* unwrap()                  { return this; }
+  virtual bool is_Q_type() const            { return false; }
   virtual bool is_null_free() const         { return false; }
 
   const char* name();
@@ -135,7 +136,8 @@ private:
 public:
   bool is_wrapper()   const { return true; }
   ciType* unwrap()          { return _type; }
-  bool is_null_free() const { return true; }
+  bool is_Q_type()    const { return true; }
+  bool is_null_free() const;
 };
 
 #endif // SHARE_CI_CITYPE_HPP

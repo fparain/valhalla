@@ -73,7 +73,7 @@ public:
   Node* get_oop() const    { return in(Oop); }
   void  set_oop(Node* oop) { set_req(Oop, oop); }
   Node* get_is_init() const { return in(IsInit); }
-  void  set_is_init(PhaseGVN& gvn) { set_req(IsInit, InlineTypeBaseNode::default_oop(gvn, inline_klass())); }
+  void  set_is_init(PhaseGVN& gvn) { set_req(IsInit, gvn.intcon(1)); }
 
   // Inline type fields
   uint          field_count() const { return req() - Values; }
@@ -93,14 +93,14 @@ public:
   // Store the inline type as a flattened (headerless) representation
   void store_flattened(GraphKit* kit, Node* base, Node* ptr, ciInstanceKlass* holder = NULL, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED) const;
   // Store the field values to memory
-  void store(GraphKit* kit, Node* base, Node* ptr, ciInstanceKlass* holder, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED) const;
+  void store(GraphKit* kit, Node* base, Node* ptr, ciInstanceKlass* holder, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED, bool flat = false) const;
   // Initialize the inline type by loading its field values from memory
-  void load(GraphKit* kit, Node* base, Node* ptr, ciInstanceKlass* holder, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED);
+  void load(GraphKit* kit, Node* base, Node* ptr, ciInstanceKlass* holder, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED, bool flat = false);
 
   // Allocates the inline type (if not yet allocated)
   InlineTypePtrNode* buffer(GraphKit* kit, bool safe_for_replace = true);
   bool is_allocated(PhaseGVN* phase) const;
-  InlineTypePtrNode* as_ptr(PhaseGVN* phase) const;
+  InlineTypePtrNode* as_ptr(PhaseGVN* phase, bool null_free = true) const;
 
   void replace_call_results(GraphKit* kit, Node* call, Compile* C);
 
@@ -127,7 +127,6 @@ private:
     : InlineTypeBaseNode(TypeInlineType::make(vk), Values + vk->nof_declared_nonstatic_fields()) {
     init_class_id(Class_InlineType);
     init_req(Oop, oop);
-    init_req(IsInit, oop);
   }
 
   // Checks if the inline type is loaded from memory and if so returns the oop
@@ -141,11 +140,11 @@ public:
   // Create with default field values
   static InlineTypeNode* make_default(PhaseGVN& gvn, ciInlineKlass* vk);
   // Create with null field values
-  static InlineTypeNode* make_null(PhaseGVN& gvn, ciInlineKlass* vk);
+  static InlineTypeNode* make_null(PhaseGVN& gvn, ciInlineKlass* vk, bool root = true);
   // Create and initialize by loading the field values from an oop
   static Node* make_from_oop(GraphKit* kit, Node* oop, ciInlineKlass* vk, bool null_free = true);
   // Create and initialize by loading the field values from a flattened field or array
-  static InlineTypeNode* make_from_flattened(GraphKit* kit, ciInlineKlass* vk, Node* obj, Node* ptr, ciInstanceKlass* holder = NULL, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED);
+  static Node* make_from_flattened(GraphKit* kit, ciInlineKlass* vk, Node* obj, Node* ptr, ciInstanceKlass* holder = NULL, int holder_offset = 0, DecoratorSet decorators = IN_HEAP | MO_UNORDERED);
   // Create and initialize with the inputs or outputs of a MultiNode (method entry or call)
   static InlineTypeNode* make_from_multi(GraphKit* kit, MultiNode* multi, ciInlineKlass* vk, uint& base_input, bool in);
 
@@ -153,7 +152,7 @@ public:
   InlineTypeNode* finish_larval(GraphKit* kit) const;
 
   // Initialize the inline type fields with the inputs or outputs of a MultiNode
-  void initialize_fields(GraphKit* kit, MultiNode* multi, uint& base_input, bool in);
+  int initialize_fields(GraphKit* kit, MultiNode* multi, uint& base_input, bool in);
 
   // Allocation optimizations
   void remove_redundant_allocations(PhaseIterGVN* igvn, PhaseIdealLoop* phase);
@@ -184,10 +183,9 @@ public:
       : InlineTypeBaseNode(TypeInstPtr::make(TypePtr::BotPTR, vk), Values + vk->nof_declared_nonstatic_fields()) {
     init_class_id(Class_InlineTypePtr);
     init_req(Oop, oop);
-    init_req(IsInit, oop);
   }
 
-  static InlineTypePtrNode* make_null(PhaseGVN& gvn, ciInlineKlass* vk);
+  static InlineTypePtrNode* make_null(PhaseGVN& gvn, ciInlineKlass* vk, bool root = true);
 
   virtual Node* Identity(PhaseGVN* phase);
 

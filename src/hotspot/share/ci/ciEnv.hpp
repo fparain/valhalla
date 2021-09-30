@@ -473,8 +473,8 @@ public:
   void dump_replay_data_unsafe(outputStream* out);
   void dump_compile_data(outputStream* out);
 
-  ciWrapper* make_null_free_wrapper(ciType* type) {
-    return _factory->make_null_free_wrapper(type);
+  ciWrapper* make_wrapper(ciType* type) {
+    return _factory->make_wrapper(type);
   }
 };
 
