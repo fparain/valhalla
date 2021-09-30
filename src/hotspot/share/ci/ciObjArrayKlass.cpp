@@ -55,7 +55,7 @@ ciObjArrayKlass::ciObjArrayKlass(Klass* k) : ciArrayKlass(k) {
   if (!ciObjectFactory::is_initialized()) {
     assert(_element_klass->is_java_lang_Object(), "only arrays of object are shared");
   }
-  _null_free = k->name()->is_Q_array_signature() && k->name()->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && !_element_klass->as_inline_klass()->is_nullable_flattenable();
+  _null_free = k->name()->is_Q_array_signature() && k->name()->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && _element_klass->as_inline_klass()->is_null_free();
 }
 
 // ------------------------------------------------------------------
@@ -76,7 +76,7 @@ ciObjArrayKlass::ciObjArrayKlass(ciSymbol* array_name,
   } else {
     _element_klass = NULL;
   }
-  _null_free = array_name->is_Q_array_signature() && array_name->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && !_element_klass->as_inline_klass()->is_nullable_flattenable();
+  _null_free = array_name->is_Q_array_signature() && array_name->char_at(1) == JVM_SIGNATURE_INLINE_TYPE && _element_klass->as_inline_klass()->is_null_free();
 }
 
 // ------------------------------------------------------------------
@@ -146,7 +146,7 @@ ciObjArrayKlass* ciObjArrayKlass::make_impl(ciKlass* element_klass, bool null_fr
     Klass* array;
     if (null_free) {
       assert(element_klass->get_Klass()->is_inline_klass(), "Only inline classes can have null free arrays");
-      array = InlineKlass::cast(element_klass->get_Klass())->null_free_inline_array_klass(THREAD);
+      array = InlineKlass::cast(element_klass->get_Klass())->value_array_klass(THREAD);
     } else {
       array = element_klass->get_Klass()->array_klass(THREAD);
     }

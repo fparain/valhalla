@@ -107,7 +107,7 @@ ciField::ciField(ciInstanceKlass* klass, int index) :
   _name = (ciSymbol*)ciEnv::current(THREAD)->get_symbol(name);
 
   // this is needed if the field class is not yet loaded.
-  _is_null_free = _signature->is_Q_signature() && !_type->as_inline_klass()->is_nullable_flattenable();
+  _is_null_free = _signature->is_Q_signature() && _type->as_inline_klass()->is_null_free();
 
   // Get the field's declared holder.
   //
@@ -294,7 +294,7 @@ void ciField::initialize_from(fieldDescriptor* fd) {
   _is_null_free = fd->signature()->is_Q_signature();
   if (_is_null_free) {
     ciKlass* type = CURRENT_ENV->get_klass_by_name_impl(_holder, constantPoolHandle(), _signature, false);
-    _is_null_free = !type->as_inline_klass()->is_nullable_flattenable();
+    _is_null_free = type->as_inline_klass()->is_null_free();
   }
 
   // Check to see if the field is constant.

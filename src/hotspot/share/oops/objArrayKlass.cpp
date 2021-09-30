@@ -105,7 +105,7 @@ ObjArrayKlass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_da
           }
           // Now retry from the beginning
           if (null_free) {
-            ek = InlineKlass::cast(element_klass)->null_free_inline_array_klass(CHECK_NULL);
+            ek = InlineKlass::cast(element_klass)->value_array_klass(CHECK_NULL);
           } else {
             ek = element_klass->array_klass(n, CHECK_NULL);
           }
@@ -159,11 +159,12 @@ ObjArrayKlass::ObjArrayKlass(int n, Klass* element_klass, Symbol* name, bool nul
   set_class_loader_data(bk->class_loader_data());
 
   int lh = array_layout_helper(T_OBJECT);
+  bool value_array = name->is_Q_array_signature();
   if (null_free) {
     assert(n == 1, "Bytecode does not support null-free multi-dim");
     lh = layout_helper_set_null_free(lh);
 #ifdef _LP64
-    set_prototype_header(markWord::null_free_array_prototype());
+    set_prototype_header(markWord::null_free_reference_array_prototype());
     assert(prototype_header().is_null_free_array(), "sanity");
 #else
     set_prototype_header(markWord::inline_type_prototype());
@@ -184,7 +185,7 @@ objArrayOop ObjArrayKlass::allocate(int length, TRAPS) {
   int size = objArrayOopDesc::object_size(length);
   bool populate_null_free = false;
   if (is_null_free_array_klass()) {
-    if (!InlineKlass::cast(element_klass())->is_nullable_flattenable()) {
+    if (InlineKlass::cast(element_klass())->is_null_free()) {
       populate_null_free = true;
     }
   }
@@ -210,7 +211,7 @@ oop ObjArrayKlass::multi_allocate(int rank, jint* sizes, TRAPS) {
   int length = *sizes;
   if (rank == 1) { // last dim may be flatArray, check if we have any special storage requirements
     if (name()->char_at(1) != JVM_SIGNATURE_ARRAY &&  name()->is_Q_array_signature()) {
-      return oopFactory::new_flatArray(element_klass(), length, CHECK_NULL);
+      return oopFactory::new_valueArray(element_klass(), length, CHECK_NULL);
     } else {
       return oopFactory::new_objArray(element_klass(), length, CHECK_NULL);
     }

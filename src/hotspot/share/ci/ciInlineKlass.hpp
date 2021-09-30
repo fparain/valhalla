@@ -81,7 +81,7 @@ public:
   bool can_be_passed_as_fields() const;
   bool can_be_returned_as_fields() const;
   bool is_empty();
-  bool is_nullable_flattenable() const;
+  bool is_null_free() const;
   int null_pivot_offset() const;
   int inline_arg_slots();
   int default_value_offset() const;

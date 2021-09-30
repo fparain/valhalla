@@ -268,7 +268,7 @@ const Type* Type::get_typeflow_type(ciType* type) {
     return TypeRawPtr::make((address)(intptr_t)type->as_return_address()->bci());
 
   case T_INLINE_TYPE: {
-    bool is_null_free = type->is_null_free();
+    bool is_null_free = type->is_marked_null_free();
     ciInlineKlass* vk = type->unwrap()->as_inline_klass();
     if (is_null_free) {
       return TypeInlineType::make(vk);
@@ -2147,11 +2147,10 @@ const TypeTuple *TypeTuple::make_domain(ciMethod* method, bool vt_fields_as_args
       field_array[pos++] = TypeInt::INT;
       break;
     case T_INLINE_TYPE: {
-      bool is_null_free = sig->is_null_free_at(i);
-      if (vt_fields_as_args && type->as_inline_klass()->can_be_passed_as_fields() && (is_null_free || sig->is_Q_type_at(i))) {
+      if (vt_fields_as_args && type->as_inline_klass()->can_be_passed_as_fields() && sig->is_Q_type_at(i)) {
         collect_inline_fields(type->as_inline_klass(), field_array, pos);
       } else {
-        field_array[pos++] = get_const_type(type)->join_speculative(is_null_free ? TypePtr::NOTNULL : TypePtr::BOTTOM);
+        field_array[pos++] = get_const_type(type)->join_speculative(sig->is_null_free_at(i) ? TypePtr::NOTNULL : TypePtr::BOTTOM);
       }
       break;
     }
@@ -5524,12 +5523,12 @@ ciKlass* TypeAryPtr::compute_klass(DEBUG_ONLY(bool verify)) const {
     // Compute object array klass from element klass
     bool null_free = el->is_inlinetypeptr() && el->isa_instptr()->ptr() != TypePtr::TopPTR && !el->isa_instptr()->maybe_null();
     // TODO
-    assert(!null_free || !el->is_inlinetypeptr() || !el->inline_klass()->is_nullable_flattenable(), "sanity");
+    assert(!null_free || !el->is_inlinetypeptr() || el->inline_klass()->is_null_free(), "sanity");
     k_ary = ciArrayKlass::make(el->is_oopptr()->klass(), null_free);
   } else if (el->isa_inlinetype()) {
     // If element type is TypeInlineType::BOTTOM, inline_klass() will be null.
     if (el->inline_klass() != NULL) {
-      k_ary = ciArrayKlass::make(el->inline_klass(), /* null_free */ !el->inline_klass()->is_nullable_flattenable());
+      k_ary = ciArrayKlass::make(el->inline_klass(), el->inline_klass()->is_null_free());
     }
   } else if ((tary = el->isa_aryptr()) != NULL) {
     // Compute array klass from element klass
@@ -5888,7 +5887,7 @@ const TypeFunc* TypeFunc::make(ciMethod* method, bool is_osr_compilation) {
   const TypeTuple* domain_sig = is_osr_compilation ? osr_domain() : TypeTuple::make_domain(method, false);
   const TypeTuple* domain_cc = has_scalar_args ? TypeTuple::make_domain(method, true) : domain_sig;
   ciSignature* sig = method->signature();
-  bool has_scalar_ret = sig->returns_Q_type() && sig->return_type()->as_inline_klass()->can_be_returned_as_fields();
+  bool has_scalar_ret = sig->returns_inline_type() && sig->return_type()->as_inline_klass()->can_be_returned_as_fields();
   const TypeTuple* range_sig = TypeTuple::make_range(sig, false);
   const TypeTuple* range_cc = has_scalar_ret ? TypeTuple::make_range(sig, true) : range_sig;
   tf = TypeFunc::make(domain_sig, domain_cc, range_sig, range_cc);

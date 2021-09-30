@@ -189,10 +189,10 @@ class markWord {
   static const uintptr_t inline_type_mask_in_place = inline_type_mask << lock_shift;
   static const uintptr_t inline_type_bit_in_place = 1 << inline_type_shift;
   static const uintptr_t null_free_array_mask     = right_n_bits(null_free_array_bits);
-  static const uintptr_t null_free_array_mask_in_place = (null_free_array_mask << null_free_array_shift) | lock_mask_in_place;
+  static const uintptr_t null_free_array_mask_in_place = null_free_array_mask << null_free_array_shift;
   static const uintptr_t null_free_array_bit_in_place  = (1 << null_free_array_shift);
   static const uintptr_t flat_array_mask          = right_n_bits(flat_array_bits);
-  static const uintptr_t flat_array_mask_in_place = (flat_array_mask << flat_array_shift) | null_free_array_mask_in_place | lock_mask_in_place;
+  static const uintptr_t flat_array_mask_in_place = flat_array_mask << flat_array_shift;
   static const uintptr_t flat_array_bit_in_place  = (1 << flat_array_shift);
 
   static const uintptr_t age_mask                 = right_n_bits(age_bits);
@@ -211,8 +211,7 @@ class markWord {
   static const uintptr_t marked_value             = 3;
 
   static const uintptr_t inline_type_pattern      = inline_type_bit_in_place | unlocked_value;
-  static const uintptr_t null_free_array_pattern  = null_free_array_bit_in_place | unlocked_value;
-  static const uintptr_t flat_array_pattern       = flat_array_bit_in_place | null_free_array_pattern;
+
   // Has static klass prototype, used for decode/encode pointer
   static const uintptr_t static_prototype_mask    = LP64_ONLY(right_n_bits(inline_type_bits + flat_array_bits + null_free_array_bits)) NOT_LP64(right_n_bits(inline_type_bits));
   static const uintptr_t static_prototype_mask_in_place = static_prototype_mask << lock_bits;
@@ -349,11 +348,11 @@ class markWord {
 
 #ifdef _LP64 // 64 bit encodings only
   bool is_flat_array() const {
-    return (mask_bits(value(), flat_array_mask_in_place) == flat_array_pattern);
+    return (mask_bits(value(), flat_array_mask_in_place) == flat_array_bit_in_place);
   }
 
   bool is_null_free_array() const {
-    return (mask_bits(value(), null_free_array_mask_in_place) == null_free_array_pattern);
+    return (mask_bits(value(), null_free_array_mask_in_place) == null_free_array_bit_in_place);
   }
 #else
   bool is_flat_array() const {
@@ -376,12 +375,16 @@ class markWord {
   }
 
 #ifdef _LP64 // 64 bit encodings only
-  static markWord flat_array_prototype() {
-    return markWord(flat_array_pattern);
+  static markWord null_free_flat_array_prototype() {
+    return markWord(flat_array_bit_in_place | null_free_array_bit_in_place | unlocked_value);
   }
 
-  static markWord null_free_array_prototype() {
-    return markWord(null_free_array_pattern);
+  static markWord nullable_flat_array_prototype() {
+    return markWord(flat_array_bit_in_place | unlocked_value);
+  }
+
+  static markWord null_free_reference_array_prototype() {
+    return markWord(null_free_array_bit_in_place | unlocked_value);
   }
 #endif
 

@@ -723,7 +723,7 @@ void Parse::do_call() {
           if (ctype->is_loaded()) {
             const TypeOopPtr* arg_type = TypeOopPtr::make_from_klass(rtype->as_klass());
             const Type*       sig_type = TypeOopPtr::make_from_klass(ctype->as_klass());
-            if (declared_signature->returns_null_free_inline_type()) {
+            if (declared_signature->returns_inline_type()) {
               sig_type = sig_type->join_speculative(TypePtr::NOTNULL);
             }
             if (arg_type != NULL && !arg_type->higher_equal(sig_type) && !peek()->is_InlineType()) {

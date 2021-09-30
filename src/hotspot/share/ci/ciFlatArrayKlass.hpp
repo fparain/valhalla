@@ -86,7 +86,7 @@ public:
     return true;
   }
 
-  virtual bool is_elem_null_free() const { return !_element_klass->as_inline_klass()->is_nullable_flattenable(); }
+  virtual bool is_elem_null_free() const { return _element_klass->as_inline_klass()->is_null_free(); }
 };
 
 

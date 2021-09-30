@@ -144,7 +144,7 @@ ciReturnAddress* ciReturnAddress::make(int bci) {
 }
 
 // ------------------------------------------------------------------
-// ciWrapper::is_null_free
-bool ciWrapper::is_null_free() const {
-  return !_type->as_inline_klass()->is_nullable_flattenable();
+// ciWrapper::is_marked_null_free
+bool ciWrapper::is_marked_null_free() const {
+  return _type->as_inline_klass()->is_null_free();
 }

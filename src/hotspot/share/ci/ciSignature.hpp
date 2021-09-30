@@ -58,7 +58,7 @@ public:
 
   ciType*   return_type() const                  { return _return_type; }
   ciType*   type_at(int index) const             { return _types.at(index)->unwrap(); }
-  bool      returns_Q_type() const;
+  bool      returns_inline_type() const;
   bool      returns_null_free_inline_type() const;
   bool      is_Q_type_at(int index) const;
   bool      is_null_free_at(int index) const;

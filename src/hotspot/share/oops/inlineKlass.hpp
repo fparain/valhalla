@@ -80,13 +80,13 @@ class InlineKlass: public InstanceKlass {
     return ((address)_adr_inlineklass_fixed_block) + in_bytes(null_pivot_offset_offset());
   }
 
-  ArrayKlass* volatile* adr_null_free_inline_array_klasses() const {
+  ArrayKlass* volatile* adr_value_array_klasses() const {
     assert(_adr_inlineklass_fixed_block != NULL, "Should have been initialized");
-    return (ArrayKlass* volatile*) ((address)_adr_inlineklass_fixed_block) + in_bytes(byte_offset_of(InlineKlassFixedBlock, _null_free_inline_array_klasses));
+    return (ArrayKlass* volatile*) ((address)_adr_inlineklass_fixed_block) + in_bytes(byte_offset_of(InlineKlassFixedBlock, _value_array_klasses));
   }
 
-  ArrayKlass* null_free_inline_array_klasses() const {
-    return *adr_null_free_inline_array_klasses();
+  ArrayKlass* value_array_klasses() const {
+    return *adr_value_array_klasses();
   }
 
   address adr_alignment() const {
@@ -193,14 +193,14 @@ class InlineKlass: public InstanceKlass {
   // null free inline arrays...
   //
 
-  // null free inline array klass, akin to InstanceKlass::array_klass()
-  // Returns the array class for the n'th dimension
-  Klass* null_free_inline_array_klass(int n, TRAPS);
-  Klass* null_free_inline_array_klass_or_null(int n);
+  // value array klass, akin to InstanceKlass::array_klass()
+  // Returns the value array class for the n'th dimension
+  Klass* value_array_klass(int n, TRAPS);
+  Klass* value_array_klass_or_null(int n);
 
-  // Returns the array class with this class as element type
-  Klass* null_free_inline_array_klass(TRAPS);
-  Klass* null_free_inline_array_klass_or_null();
+  // Returns the value array class with this class as element type
+  Klass* value_array_klass(TRAPS);
+  Klass* value_array_klass_or_null();
 
 
   // General store methods

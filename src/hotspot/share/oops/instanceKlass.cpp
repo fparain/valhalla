@@ -162,7 +162,7 @@ static inline bool is_class_loader(const Symbol* class_name,
   return false;
 }
 
-bool InstanceKlass::field_is_null_free_inline_type(int index) const { return Signature::basic_type(field(index)->signature(constants())) == T_INLINE_TYPE; }
+bool InstanceKlass::field_is_inline_type(int index) const { return Signature::basic_type(field(index)->signature(constants())) == T_INLINE_TYPE; }
 
 // private: called to verify that k is a static member of this nest.
 // We know that k is an instance class in the same package and hence the
@@ -1285,7 +1285,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
           set_inline_type_field_klass(fs.index(), klass);
         }
         InstanceKlass::cast(klass)->initialize(CHECK);
-        if (fs.access_flags().is_static() && !InlineKlass::cast(klass)->is_nullable_flattenable()) {
+        if (fs.access_flags().is_static() && InlineKlass::cast(klass)->is_null_free()) {
           if (java_mirror()->obj_field(fs.offset()) == NULL) {
             java_mirror()->obj_field_put(fs.offset(), InlineKlass::cast(klass)->default_value());
           }

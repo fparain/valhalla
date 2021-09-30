@@ -182,7 +182,7 @@ Node* InlineTypeBaseNode::field_value(uint index) const {
 // Get the value of the field at the given offset.
 // If 'recursive' is true, flattened inline type fields will be resolved recursively.
 Node* InlineTypeBaseNode::field_value_by_offset(int offset, bool recursive) const {
-  if (inline_klass()->is_nullable_flattenable() && offset == inline_klass()->null_pivot_offset()) {
+  if (!inline_klass()->is_null_free() && offset == inline_klass()->null_pivot_offset()) {
     return get_is_init();
   }
   // If the field at 'offset' belongs to a flattened inline type field, 'index' refers to the
@@ -363,7 +363,7 @@ void InlineTypeBaseNode::load(GraphKit* kit, Node* base, Node* ptr, ciInstanceKl
   }
   ciInlineKlass* vk = inline_klass();
   // TODO holder_offset hack
-  if (flat && vk->is_nullable_flattenable()) {
+  if (flat && !vk->is_null_free()) {
     int offset = holder_offset + vk->null_pivot_offset();
     Node* adr = kit->basic_plus_adr(base, ptr, offset);
     // TODO
@@ -442,7 +442,7 @@ void InlineTypeBaseNode::store(GraphKit* kit, Node* base, Node* ptr, ciInstanceK
   }
   ciInlineKlass* vk = inline_klass();
   // TODO if constant null, no need to store fields
-  if (flat && vk->is_nullable_flattenable()) {
+  if (flat && !vk->is_null_free()) {
     int offset = holder_offset + vk->null_pivot_offset();
     Node* adr = kit->basic_plus_adr(base, ptr, offset);
     // TODO
@@ -459,7 +459,7 @@ void InlineTypeBaseNode::store(GraphKit* kit, Node* base, Node* ptr, ciInstanceK
     if (field_is_flattened(i)) {
       // Recursively store the flattened inline type field
       if (!value->is_InlineType()) {
-        value = InlineTypeNode::make_from_oop(kit, value, ft->as_inline_klass(), !ft->as_inline_klass()->is_nullable_flattenable());
+        value = InlineTypeNode::make_from_oop(kit, value, ft->as_inline_klass(), ft->as_inline_klass()->is_null_free());
       }
       value->as_InlineTypeBase()->store_flattened(kit, base, ptr, holder, offset, decorators);
     } else {
@@ -997,7 +997,7 @@ int InlineTypeNode::initialize_fields(GraphKit* kit, MultiNode* multi, uint& bas
   uint pidx = 0; // Parm index (includes pivot fields)
   int pivot_offset = -1;
   uint max = field_count();
-  if (vk->is_nullable_flattenable()) {
+  if (!vk->is_null_free()) {
     max++;
     pivot_offset = vk->null_pivot_offset();
   }

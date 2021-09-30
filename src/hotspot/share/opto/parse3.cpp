@@ -291,7 +291,7 @@ void Parse::do_put_xxx(Node* obj, ciField* field, bool is_field) {
 void Parse::do_newarray() {
   bool will_link;
   ciKlass* klass = iter().get_klass(will_link);
-  bool null_free = iter().has_Q_signature() && !klass->as_inline_klass()->is_nullable_flattenable();
+  bool null_free = iter().has_Q_signature() && klass->as_inline_klass()->is_null_free();
 
   // Uncommon Trap when class that array contains is not loaded
   // we need the loaded class for the rest of graph; do not

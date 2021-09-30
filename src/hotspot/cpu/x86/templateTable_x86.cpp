@@ -1141,7 +1141,8 @@ void TemplateTable::dastore() {
 }
 
 void TemplateTable::aastore() {
-  Label is_null, is_flat_array, ok_is_subtype, done;
+  Label is_null, is_flat_array, ok_is_subtype, done, is_nullable_flattened;
+
   transition(vtos, vtos);
   // stack: ..., array, index, value
   __ movptr(rax, at_tos());    // value
@@ -1200,6 +1201,12 @@ void TemplateTable::aastore() {
 
     // No way to store null in null-free array
     __ test_null_free_array_oop(rdx, rbx, is_null_into_value_array_npe);
+    Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+    __ load_klass(rdi, rdx, tmp_load_klass);
+    if (UseFlatArray) {
+      __ movl(rbx, Address(rdi, Klass::layout_helper_offset()));
+      __ test_flattened_array_layout(rbx, is_nullable_flattened);
+    }
     __ jmp(store_null);
 
     __ bind(is_null_into_value_array_npe);
@@ -1235,8 +1242,7 @@ void TemplateTable::aastore() {
     // rdi: array klass
 
     // need special handling for nullable flattenable in order to update the pivot field
-    Label is_nullable_flattenable;
-    __ test_klass_is_nullable_flattenable(rbx, rax, is_nullable_flattenable);
+    __ test_klass_is_not_null_free(rbx, rax, is_nullable_flattened);
 
     __ test_klass_is_empty_inline_type(rbx, rax, done);
 
@@ -1251,7 +1257,7 @@ void TemplateTable::aastore() {
     __ access_value_copy(IN_HEAP, rcx, rax, rbx);
     __ jmp(done);
 
-    __ bind(is_nullable_flattenable);
+    __ bind(is_nullable_flattened);
     __ movl(rax, at_tos_p1()); // index
     __ movptr(rbx, at_tos());  // value
     __ movptr(rdx, at_tos_p2()); // array
@@ -3013,26 +3019,26 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
     if (is_static) {
       __ load_heap_oop(rax, field);
       if (EnableValhalla) {
-        Label is_null_free_inline_type, uninitialized;
+        Label is_inline_type, field_is_null;
         // Issue below if the static field has not been initialized yet
-        __ test_field_is_null_free_inline_type(flags2, rscratch1, is_null_free_inline_type);
-          // field is not a null free inline type
+        __ test_field_is_inline_type(flags2, rscratch1, is_inline_type);
+          // field is not an inline type
           __ push(atos);
           __ jmp(Done);
-        // field is a null free inline type, must not return null even if uninitialized
-        __ bind(is_null_free_inline_type);
+        // field is an inline type, if field's value is null, more work is required (see below)
+        __ bind(is_inline_type);
           __ testptr(rax, rax);
-          __ jcc(Assembler::zero, uninitialized);
+          __ jcc(Assembler::zero, field_is_null);
             __ push(atos);
             __ jmp(Done);
-          __ bind(uninitialized);
+          __ bind(field_is_null);
   #ifdef _LP64
             Label slow_case, finish;
-            __ test_field_is_nullable_flattenable(flags2, rscratch1, finish); // if nullable flattenable: nothing to do, rax already contains null
+            __ test_field_is_not_null_free(flags2, rscratch1, finish); // if nullable: nothing to do, rax already contains null
             __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
             __ jcc(Assembler::notEqual, slow_case);
-          __ get_default_value_oop(rcx, off, rax);
-          __ jmp(finish);
+            __ get_default_value_oop(rcx, off, rax);
+            __ jmp(finish);
           __ bind(slow_case);
   #endif // LP64
             __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
@@ -3040,16 +3046,16 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
                   obj, flags2);
 
   #ifdef _LP64
-            __ bind(finish);
+          __ bind(finish);
   #endif // _LP64
       }
         __ verify_oop(rax);
         __ push(atos);
         __ jmp(Done);
     } else {
-      Label is_inlined, nonnull, is_inline_type, rewrite_inline;
+      Label is_inlined, finish, is_inline_type, rewrite_inline;
       if (EnableValhalla) {
-        __ test_field_is_null_free_inline_type(flags2, rscratch1, is_inline_type);
+        __ test_field_is_inline_type(flags2, rscratch1, is_inline_type);
       }
       // field is not a null free inline type
       pop_and_check_object(obj);
@@ -3069,35 +3075,31 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
             __ load_heap_oop(rax, field);
             __ pop(rcx);
             __ testptr(rax, rax);
-            __ jcc(Assembler::notZero, nonnull);
-              // oop is null, must return null if nullable flattenable, otherwise return the default value
-              Label is_nullable_flattenable;
-              __ test_field_is_nullable_flattenable(flags2, rscratch1, is_nullable_flattenable);
+            __ jcc(Assembler::notZero, finish);
+              // oop is null, must return null if nullable , otherwise return the default value
+              __ test_field_is_not_null_free(flags2, rscratch1, finish); // if nullable, nothing to do, rax is already null
                 __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
                 __ get_inline_type_field_klass(rcx, flags2, rbx);
                 __ get_default_value_oop(rbx, rcx, rax);
-                __ jmp(nonnull);
-              __ bind(is_nullable_flattenable);
-                 // nothing to do, rax is already null
-            __ bind(nonnull);
+            __ bind(finish);
             __ verify_oop(rax);
             __ push(atos);
             __ jmp(rewrite_inline);
           __ bind(is_inlined);
           // field is inlined
           // if the field is nullable flattenable and a vull, return null, otherwise return a heap buffered value
-            Label is_nullable_flattenable2;
-            __ test_field_is_nullable_flattenable(flags2, rscratch1, is_nullable_flattenable2);
+            Label is_nullable;
+            __ test_field_is_not_null_free(flags2, rscratch1, is_nullable);
               __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
               pop_and_check_object(rax);
               __ read_inlined_field(rcx, flags2, rbx, rax);
               __ verify_oop(rax);
               __ push(atos);
               __ jmp(rewrite_inline);
-            __ bind(is_nullable_flattenable2);
+            __ bind(is_nullable);
               __ andl(flags2, ConstantPoolCacheEntry::field_index_mask);
               pop_and_check_object(rax);
-              __ read_nullable_flattenable_field(rcx, flags2, rbx, rax);
+              __ read_nullable_flattened_field(rcx, flags2, rbx, rax);
               __ verify_oop(rax);
               __ push(atos);
         __ bind(rewrite_inline);
@@ -3423,19 +3425,19 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     } else {
       __ pop(atos);
       if (is_static) {
-        Label not_null_free;
+        Label not_null_check;
         if (EnableValhalla) {
-          __ test_field_is_not_null_free_inline_type(flags2, rscratch1, not_null_free);
-          __ test_field_is_nullable_flattenable(flags2, rscratch1, not_null_free);
+          __ test_field_is_not_inline_type(flags2, rscratch1, not_null_check);
+          __ test_field_is_not_null_free(flags2, rscratch1, not_null_check);
           __ null_check(rax);
-          __ bind(not_null_free);
+          __ bind(not_null_check);
         }
         do_oop_store(_masm, field, rax);
         __ jmp(Done);
       } else {
         Label is_inline_type, is_inlined, rewrite_not_inline, rewrite_inline;
         if (EnableValhalla) {
-          __ test_field_is_null_free_inline_type(flags2, rscratch1, is_inline_type);
+          __ test_field_is_inline_type(flags2, rscratch1, is_inline_type);
         }
         // Not an inline type
         pop_and_check_object(obj);
@@ -3449,29 +3451,30 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
         if (EnableValhalla) {
           // Implementation of the inline type semantic
           __ bind(is_inline_type);
-          Label is_nullable_flattenable;
-          __ test_field_is_nullable_flattenable(flags2, rscratch1, is_nullable_flattenable);
-            __ null_check(rax);
-            __ test_field_is_inlined(flags2, rscratch1, is_inlined);
-            // field is not inlined
-            pop_and_check_object(obj);
-            // Store into the field
-            do_oop_store(_masm, field, rax);
-            __ jmp(rewrite_inline);
-            __ bind(is_inlined);
-            // field is inlined
-            pop_and_check_object(obj);
-            assert_different_registers(rax, rdx, obj, off);
-            __ load_klass(rdx, rax, rscratch1);
-            __ data_for_oop(rax, rax, rdx);
-            __ addptr(obj, off);
-            __ access_value_copy(IN_HEAP, rax, obj, rdx);
-            __ jmp (rewrite_inline);
-          __ bind(is_nullable_flattenable);
+          Label is_null_free;
+          __ test_field_is_null_free(flags2, rscratch1, is_null_free);
+            // Field is nullable, call the runtime to handle the situation
             __ andl(rdx, ConstantPoolCacheEntry::field_index_mask);
             pop_and_check_object(obj);
             __ movptr(rbx, obj); // shuffling arguments because of the calling convention
             __ write_nullable_flattenable_field(rbx, rdx, rax);
+            __ jmp (rewrite_inline);
+          __ bind(is_null_free);
+            __ null_check(rax);
+            __ test_field_is_inlined(flags2, rscratch1, is_inlined);
+              // field is not inlined
+              pop_and_check_object(obj);
+              // Store into the field
+              do_oop_store(_masm, field, rax);
+              __ jmp(rewrite_inline);
+            __ bind(is_inlined);
+              // field is inlined
+              pop_and_check_object(obj);
+              assert_different_registers(rax, rdx, obj, off);
+              __ load_klass(rdx, rax, rscratch1);
+              __ data_for_oop(rax, rax, rdx);
+              __ addptr(obj, off);
+              __ access_value_copy(IN_HEAP, rax, obj, rdx);
           __ bind(rewrite_inline);
           if (rc == may_rewrite) {
             patch_bytecode(Bytecodes::_fast_qputfield, bc, rbx, true, byte_no);
@@ -3725,7 +3728,7 @@ void TemplateTable::fast_storefield_helper(Address field, Register rax, Register
   case Bytecodes::_fast_qputfield:
     {
       Label is_inlined, is_nullable_flattenable, done;
-      __ test_field_is_nullable_flattenable(flags, rscratch1, is_nullable_flattenable);
+      __ test_field_is_not_null_free(flags, rscratch1, is_nullable_flattenable);
         __ null_check(rax);
         __ test_field_is_inlined(flags, rscratch1, is_inlined);
           // field is not inlined
@@ -3831,7 +3834,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   switch (bytecode()) {
   case Bytecodes::_fast_qgetfield:
     {
-      Label is_inlined, nonnull, Done;
+      Label is_inlined, finish, Done;
       __ movptr(rscratch1, Address(rcx, rbx, Address::times_ptr,
                                    in_bytes(ConstantPoolCache::base_offset() +
                                             ConstantPoolCacheEntry::flags_offset())));
@@ -3839,10 +3842,9 @@ void TemplateTable::fast_accessfield(TosState state) {
         // field is not inlined
         __ load_heap_oop(rax, field);
         __ testptr(rax, rax);
-        __ jcc(Assembler::notZero, nonnull);
+        __ jcc(Assembler::notZero, finish);
           // if field is nullable flattenable return null, otherwise return the default value
-          Label is_nullable_flattenable;
-          __ test_field_is_nullable_flattenable(rscratch1, rscratch2, is_nullable_flattenable);
+          __ test_field_is_not_null_free(rscratch1, rscratch2, finish); // field is nullable, rax already contains null, nothing to do
             __ movl(rdx, Address(rcx, rbx, Address::times_ptr,
                               in_bytes(ConstantPoolCache::base_offset() +
                                         ConstantPoolCacheEntry::flags_offset())));
@@ -3852,10 +3854,7 @@ void TemplateTable::fast_accessfield(TosState state) {
                                                   ConstantPoolCacheEntry::f1_offset())));
             __ get_inline_type_field_klass(rcx, rdx, rbx);
             __ get_default_value_oop(rbx, rcx, rax);
-            __ jmp(nonnull);
-          __ bind(is_nullable_flattenable);
-            // __ movptr(rax, (int32_t) NULL_WORD);   // useless, rax is already null
-        __ bind(nonnull);
+        __ bind(finish);
         __ verify_oop(rax);
         __ jmp(Done);
       __ bind(is_inlined);
@@ -3870,12 +3869,12 @@ void TemplateTable::fast_accessfield(TosState state) {
                                     in_bytes(ConstantPoolCache::base_offset() +
                                               ConstantPoolCacheEntry::f1_offset())));
         __ pop(rbx); // restore offset
-        Label is_nullable_flattenable2;
-        __ test_field_is_nullable_flattenable(rscratch1, rscratch2, is_nullable_flattenable2);
-          __ read_inlined_field(rcx, rdx, rbx, rax);
+        Label is_null_free;
+        __ test_field_is_null_free(rscratch1, rscratch2, is_null_free);
+          __ read_nullable_flattened_field(rcx, rdx, rbx, rax);  // Nullable field, must check the pivot field
           __ jmp(Done);
-        __ bind(is_nullable_flattenable2);
-          __ read_nullable_flattenable_field(rcx, rdx, rbx, rax);
+        __ bind(is_null_free);
+          __ read_inlined_field(rcx, rdx, rbx, rax); // simple read of a flattened field
       __ bind(Done);
       __ verify_oop(rax);
     }
@@ -4516,8 +4515,8 @@ void TemplateTable::checkcast() {
     __ testptr(rdx, rdx); // object is in rdx
     __ jcc(Assembler::notZero, not_null_inline_type_slow_path);
     __ movl(rbx, Address(rax, InstanceKlass::misc_flags_offset()));
-    __ testl(rbx, InstanceKlass::_misc_is_nullable_flattenable);
-    __ jcc(Assembler::notZero, ok_is_subtype);
+    __ testl(rbx, InstanceKlass::_misc_is_null_free);
+    __ jcc(Assembler::zero, ok_is_subtype);
     __ jump(ExternalAddress(Interpreter::_throw_NullPointerException_entry));
     __ bind (not_null_inline_type_slow_path);
   }

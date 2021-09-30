@@ -1170,13 +1170,13 @@ OopMapSet* Runtime1::generate_code_for(StubID id, StubAssembler* sasm) {
           case new_object_array_id:
             __ cmpl(t0, Klass::_lh_array_tag_obj_value); // new "[Ljava/lang/Object;"
             __ jcc(Assembler::equal, ok);
-            __ cmpl(t0, Klass::_lh_array_tag_vt_value);  // new "[LVT;"
+            __ cmpl(t0, Klass::_lh_array_tag_flat_value);  // new "[LVT;"
             __ jcc(Assembler::equal, ok);
             __ stop("assert(is an object or inline type array klass)");
             break;
           case new_flat_array_id:
             // new "[QVT;"
-            __ cmpl(t0, Klass::_lh_array_tag_vt_value);  // the array can be flattened.
+            __ cmpl(t0, Klass::_lh_array_tag_flat_value);  // the array can be flattened.
             __ jcc(Assembler::equal, ok);
             __ cmpl(t0, Klass::_lh_array_tag_obj_value); // the array cannot be flattened (due to InlineArrayElementMaxFlatSize, etc)
             __ jcc(Assembler::equal, ok);

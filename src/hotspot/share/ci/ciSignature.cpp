@@ -75,8 +75,8 @@ ciSignature::ciSignature(ciKlass* accessing_klass, const constantPoolHandle& cpo
 }
 
 // ------------------------------------------------------------------
-// ciSignature::returns_Q_type
-bool ciSignature::returns_Q_type() const {
+// ciSignature::returns_inline_type
+bool ciSignature::returns_inline_type() const {
   GUARDED_VM_ENTRY(return get_symbol()->is_Q_method_signature();)
 }
 
@@ -84,7 +84,7 @@ bool ciSignature::returns_Q_type() const {
 // ciSignature::returns_null_free_inline_type
 bool ciSignature::returns_null_free_inline_type() const {
   // TODO the _return_type->is_loaded() check is required by C1
-  GUARDED_VM_ENTRY(return get_symbol()->is_Q_method_signature() && (!_return_type->is_loaded() || !_return_type->as_inline_klass()->is_nullable_flattenable());)
+  GUARDED_VM_ENTRY(return get_symbol()->is_Q_method_signature() && (!_return_type->is_loaded() || _return_type->as_inline_klass()->is_null_free());)
 }
 
 // ------------------------------------------------------------------
@@ -98,7 +98,7 @@ bool ciSignature::is_Q_type_at(int index) const {
 // ciSignature::is_null_free_at
 // True if we know that the argument at 'index' is null-free.
 bool ciSignature::is_null_free_at(int index) const {
-  return _types.at(index)->is_null_free();
+  return _types.at(index)->is_marked_null_free();
 }
 
 // ------------------------------------------------------------------

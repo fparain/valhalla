@@ -2759,34 +2759,48 @@ void MacroAssembler::test_klass_is_empty_inline_type(Register klass, Register te
   jcc(Assembler::notZero, is_empty_inline_type);
 }
 
-void MacroAssembler::test_klass_is_nullable_flattenable(Register klass, Register temp_reg, Label& is_nullable_flattenable) {
+void MacroAssembler::test_klass_is_null_free(Register klass, Register temp_reg, Label& is_null_free) {
 #ifdef ASSERT
   {
     Label done_check;
     test_klass_is_inline_type(klass, temp_reg, done_check);
-    stop("test_klass_is_nullable_flattenable with non inline type klass");
+    stop("test_klass_is_null_free with non inline type klass");
     bind(done_check);
   }
 #endif
   movl(temp_reg, Address(klass, InstanceKlass::misc_flags_offset()));
-  testl(temp_reg, InstanceKlass::misc_flag_is_nullable_flattenable());
-  jcc(Assembler::notZero, is_nullable_flattenable);
+  testl(temp_reg, InstanceKlass::misc_flag_is_null_free());
+  jcc(Assembler::notZero, is_null_free);
 }
 
-void MacroAssembler::test_field_is_null_free_inline_type(Register flags, Register temp_reg, Label& is_null_free_inline_type) {
-  movl(temp_reg, flags);
-  shrl(temp_reg, ConstantPoolCacheEntry::is_null_free_inline_type_shift);
-  andl(temp_reg, 0x1);
-  testl(temp_reg, temp_reg);
-  jcc(Assembler::notZero, is_null_free_inline_type);
+void MacroAssembler::test_klass_is_not_null_free(Register klass, Register temp_reg, Label& is_not_null_free) {
+#ifdef ASSERT
+  {
+    Label done_check;
+    test_klass_is_inline_type(klass, temp_reg, done_check);
+    stop("test_klass_is_null_free with non inline type klass");
+    bind(done_check);
+  }
+#endif
+  movl(temp_reg, Address(klass, InstanceKlass::misc_flags_offset()));
+  testl(temp_reg, InstanceKlass::misc_flag_is_null_free());
+  jcc(Assembler::zero, is_not_null_free);
 }
 
-void MacroAssembler::test_field_is_not_null_free_inline_type(Register flags, Register temp_reg, Label& not_null_free_inline_type) {
+void MacroAssembler::test_field_is_inline_type(Register flags, Register temp_reg, Label& is_inline_type) {
   movl(temp_reg, flags);
-  shrl(temp_reg, ConstantPoolCacheEntry::is_null_free_inline_type_shift);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_inline_type_shift);
   andl(temp_reg, 0x1);
   testl(temp_reg, temp_reg);
-  jcc(Assembler::zero, not_null_free_inline_type);
+  jcc(Assembler::notZero, is_inline_type);
+}
+
+void MacroAssembler::test_field_is_not_inline_type(Register flags, Register temp_reg, Label& not_inline_type) {
+  movl(temp_reg, flags);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_inline_type_shift);
+  andl(temp_reg, 0x1);
+  testl(temp_reg, temp_reg);
+  jcc(Assembler::zero, not_inline_type);
 }
 
 void MacroAssembler::test_field_is_inlined(Register flags, Register temp_reg, Label& is_inlined) {
@@ -2797,14 +2811,21 @@ void MacroAssembler::test_field_is_inlined(Register flags, Register temp_reg, La
   jcc(Assembler::notZero, is_inlined);
 }
 
-void MacroAssembler::test_field_is_nullable_flattenable(Register flags, Register temp_reg, Label& is_nullable_flattenable) {
+void MacroAssembler::test_field_is_null_free(Register flags, Register temp_reg, Label& is_null_free) {
   movl(temp_reg, flags);
-  shrl(temp_reg, ConstantPoolCacheEntry::is_nullable_flattenable_shift);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_null_free_shift);
   andl(temp_reg, 0x1);
   testl(temp_reg, temp_reg);
-  jcc(Assembler::notZero, is_nullable_flattenable);
+  jcc(Assembler::notZero, is_null_free);
 }
 
+void MacroAssembler::test_field_is_not_null_free(Register flags, Register temp_reg, Label& is_null_free) {
+  movl(temp_reg, flags);
+  shrl(temp_reg, ConstantPoolCacheEntry::is_null_free_shift);
+  andl(temp_reg, 0x1);
+  testl(temp_reg, temp_reg);
+  jcc(Assembler::zero, is_null_free);
+}
 
 void MacroAssembler::test_oop_prototype_bit(Register oop, Register temp_reg, int32_t test_bit, bool jmp_set, Label& jmp_label) {
   Label test_mark_word;
@@ -2866,22 +2887,22 @@ void MacroAssembler::test_non_null_free_array_oop(Register oop, Register temp_re
 }
 
 void MacroAssembler::test_flattened_array_layout(Register lh, Label& is_flattened_array) {
-  testl(lh, Klass::_lh_array_tag_vt_value_bit_inplace);
+  testl(lh, Klass::_lh_array_tag_flat_value_bit_inplace);
   jcc(Assembler::notZero, is_flattened_array);
 }
 
 void MacroAssembler::test_non_flattened_array_layout(Register lh, Label& is_non_flattened_array) {
-  testl(lh, Klass::_lh_array_tag_vt_value_bit_inplace);
+  testl(lh, Klass::_lh_array_tag_flat_value_bit_inplace);
   jcc(Assembler::zero, is_non_flattened_array);
 }
 
 void MacroAssembler::test_null_free_array_layout(Register lh, Label& is_null_free_array) {
-  testl(lh, Klass::_lh_null_free_bit_inplace);
+  testl(lh, Klass::_lh_null_free_array_bit_inplace);
   jcc(Assembler::notZero, is_null_free_array);
 }
 
 void MacroAssembler::test_non_null_free_array_layout(Register lh, Label& is_non_null_free_array) {
-  testl(lh, Klass::_lh_null_free_bit_inplace);
+  testl(lh, Klass::_lh_null_free_array_bit_inplace);
   jcc(Assembler::zero, is_non_null_free_array);
 }
 

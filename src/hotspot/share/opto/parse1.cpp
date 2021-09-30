@@ -2378,7 +2378,7 @@ void Parse::return_current(Node* value) {
     if (return_type->isa_inlinetype()) {
       // Inline type is returned as fields, make sure it is scalarized
       if (!value->is_InlineType()) {
-        value = InlineTypeNode::make_from_oop(this, value, return_type->inline_klass(), !return_type->inline_klass()->is_nullable_flattenable());
+        value = InlineTypeNode::make_from_oop(this, value, return_type->inline_klass(), return_type->inline_klass()->is_null_free());
       }
       if (!_caller->has_method() || Compile::current()->inlining_incrementally()) {
         // Returning from root or an incrementally inlined method. Make sure all non-flattened

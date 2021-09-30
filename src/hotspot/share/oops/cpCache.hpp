@@ -184,12 +184,12 @@ class ConstantPoolCacheEntry {
     is_field_entry_shift       = 26,  // (F) is it a field or a method?
     has_local_signature_shift  = 25,  // (S) does the call site have a per-site signature (sig-poly methods)?
     has_appendix_shift         = 24,  // (A) does the call site have an appendix argument?
-    is_null_free_inline_type_shift = 24,  // (I) is the field a null free inline type (must never be null)
+    is_inline_type_shift       = 24,  // (I) is the field a value of an inline type (can be flattened, can be null except if is_null_free_ is set)
     is_forced_virtual_shift    = 23,  // (I) is the interface reference forced to virtual mode?
     is_inlined_shift           = 23,  // (i) is the field inlined?
     is_final_shift             = 22,  // (f) is the field or method final?
     is_volatile_shift          = 21,  // (v) is the field volatile?
-    is_nullable_flattenable_shift = 20,  // (n) is the field nullable flattenable?
+    is_null_free_shift         = 20,  // (n) is the field null free (inline types only)?
     is_vfinal_shift            = 20,  // (vf) did the call resolve to a final method?
     indy_resolution_failed_shift= 19, // (indy_rf) did call site specifier resolution fail ?
     // low order bits give field index (for FieldInfo) or method parameter size:
@@ -228,8 +228,8 @@ class ConstantPoolCacheEntry {
     bool            is_final,                    // the field is final
     bool            is_volatile,                 // the field is volatile
     bool            is_inlined,                  // the field is inlined
-    bool            is_null_free_inline_type,    // the field is an inline type (must never be null)
-    bool            is_nullable_flattenable      // the field is nullable flattenable
+    bool            is_inline_type,              // the field is a value of an inline type
+    bool            is_null_free                 // the field is null free (inline types only)
   );
 
  private:
@@ -351,7 +351,7 @@ class ConstantPoolCacheEntry {
   int  field_index() const                       { assert(is_field_entry(),  ""); return (_flags & field_index_mask); }
   int  parameter_size() const                    { assert(is_method_entry(), ""); return (_flags & parameter_size_mask); }
   bool is_volatile() const                       { return (_flags & (1 << is_volatile_shift))       != 0; }
-  bool is_nullable_flattenable() const           { return (_flags & (1 << is_nullable_flattenable_shift)) != 0; }
+  bool is_null_free() const                      { return (_flags & (1 << is_null_free_shift)) != 0; }
   bool is_final() const                          { return (_flags & (1 << is_final_shift))          != 0; }
   bool is_inlined() const                        { return  (_flags & (1 << is_inlined_shift))       != 0; }
   bool is_forced_virtual() const                 { return (_flags & (1 << is_forced_virtual_shift)) != 0; }
@@ -363,7 +363,7 @@ class ConstantPoolCacheEntry {
   bool is_field_entry() const                    { return (_flags & (1 << is_field_entry_shift))    != 0; }
   bool is_long() const                           { return flag_state() == ltos; }
   bool is_double() const                         { return flag_state() == dtos; }
-  bool is_null_free_inline_type() const          { return (_flags & (1 << is_null_free_inline_type_shift)) != 0; }
+  bool is_inline_type() const                    { return (_flags & (1 << is_inline_type_shift)) != 0; }
   TosState flag_state() const                    { assert((uint)number_of_states <= (uint)tos_state_mask+1, "");
                                                    return (TosState)((_flags >> tos_state_shift) & tos_state_mask); }
   void set_indy_resolution_failed();

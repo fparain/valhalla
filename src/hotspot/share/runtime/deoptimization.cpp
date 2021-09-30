@@ -1136,7 +1136,7 @@ bool Deoptimization::realloc_inline_type_result(InlineKlass* vk, const RegisterM
     CLEAR_PENDING_EXCEPTION;
     THROW_OOP_(Universe::out_of_memory_error_realloc_objects(), true);
   }
-  assert(new_vt != NULL || vk->is_nullable_flattenable(), "Unexpected re-allocation failure");
+  assert(new_vt != NULL || !vk->is_null_free(), "Unexpected re-allocation failure");
   return_oops.clear();
   return_oops.push(Handle(THREAD, new_vt));
   return false;
@@ -1334,7 +1334,7 @@ static int reassign_fields_by_klass(InstanceKlass* klass, frame* fr, RegisterMap
   InstanceKlass* ik = klass;
   while (ik != NULL) {
     for (AllFieldStream fs(ik); !fs.done(); fs.next()) {
-      bool is_pivot = ik->is_inline_klass() && InlineKlass::cast(ik)->is_nullable_flattenable() &&
+      bool is_pivot = ik->is_inline_klass() && !InlineKlass::cast(ik)->is_null_free() &&
                       fs.offset() == InlineKlass::cast(ik)->null_pivot_offset();
       if (!fs.access_flags().is_static() && (!skip_internal || !fs.access_flags().is_internal() || is_pivot)) {
         ReassignedField field;

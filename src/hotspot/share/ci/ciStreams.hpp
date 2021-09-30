@@ -293,7 +293,7 @@ public:
 
   bool is_null_free() {
     if (at_return_type()) {
-      return _sig->returns_null_free_inline_type();
+      return _sig->returns_inline_type();
     } else {
       return _sig->is_null_free_at(_pos);
     }

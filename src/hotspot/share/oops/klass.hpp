@@ -373,16 +373,30 @@ protected:
   static const int _lh_array_tag_bits          = 3;
   static const int _lh_array_tag_shift         = BitsPerInt - _lh_array_tag_bits;
 
+  // tags to identify the implementation kind of array: typeArray, flatArray or objArray (determine the layout of the array)
   static const unsigned int _lh_array_tag_type_value = 0Xfffffffc;
-  static const unsigned int _lh_array_tag_vt_value   = 0Xfffffffd;
+  static const unsigned int _lh_array_tag_flat_value = 0Xfffffffd;
   static const unsigned int _lh_array_tag_obj_value  = 0Xfffffffe;
 
-  // null-free array flag bit under the array tag bits, shift one more to get array tag value
+  // Array semantic can be divided in three categories:
+  //   - arrays of raw primitive types (boolean, byte, char, short, int, long, float, double)
+  //   - arrays of references (can store references to instances of identity classes or primitive classes)
+  //   - arrays of values (store values of a primitive class)
+  // Reference arrays can have heterogenous elements, and any element can be null.
+  // Reference arrays are always implemented with objArrays.
+  // Value arrays are always homogeneous, they can store null or not, depending of the primitive class of the element class.
+  // Value arrays can be implemented either with an objArray or a flatArray
+
+  // null free array flag bit under the array tag bits, shift one more to get array tag value
   static const int _lh_null_free_shift = _lh_array_tag_shift - 1;
   static const int _lh_null_free_mask  = 1;
 
-  static const jint _lh_array_tag_vt_value_bit_inplace = (jint) (1 << _lh_array_tag_shift);
-  static const jint _lh_null_free_bit_inplace = (jint) (_lh_null_free_mask << _lh_null_free_shift);
+  // value array flag bit under the array tag bits
+  static const int _lh_value_array_shift = _lh_null_free_shift - 1;
+  static const int _lh_value_array_mask  = 1;
+
+  static const jint _lh_array_tag_flat_value_bit_inplace = (jint) (1 << _lh_array_tag_shift);
+  static const jint _lh_null_free_array_bit_inplace = (jint) (_lh_null_free_mask << _lh_null_free_shift);
 
   static int layout_helper_size_in_bytes(jint lh) {
     assert(lh > (jint)_lh_neutral_value, "must be instance");
@@ -405,15 +419,24 @@ protected:
     return (juint)_lh_array_tag_obj_value == (juint)(lh >> _lh_array_tag_shift);
   }
   static bool layout_helper_is_flatArray(jint lh) {
-    return (juint)_lh_array_tag_vt_value == (juint)(lh >> _lh_array_tag_shift);
+    return (juint)_lh_array_tag_flat_value == (juint)(lh >> _lh_array_tag_shift);
   }
   static bool layout_helper_is_null_free(jint lh) {
     assert(layout_helper_is_flatArray(lh) || layout_helper_is_objArray(lh), "must be array of inline types");
-    return ((lh >> _lh_null_free_shift) & _lh_null_free_mask);
+    return (((lh >> _lh_null_free_shift) & _lh_null_free_mask)) != 0;
   }
   static jint layout_helper_set_null_free(jint lh) {
     lh |= (_lh_null_free_mask << _lh_null_free_shift);
     assert(layout_helper_is_null_free(lh), "Bad encoding");
+    return lh;
+  }
+  static bool layout_helper_is_value_array(jint lh) {
+    assert(layout_helper_is_flatArray(lh) || layout_helper_is_objArray(lh), "must be array of inline types");
+    return (((lh >> _lh_value_array_shift) & _lh_value_array_mask)) != 0;
+  }
+  static jint layout_helper_set_value_array(jint lh) {
+    lh |= (_lh_value_array_mask << _lh_value_array_shift);
+    assert(layout_helper_is_value_array(lh), "Bad encoding");
     return lh;
   }
   static int layout_helper_header_size(jint lh) {
@@ -450,8 +473,9 @@ protected:
            "sanity. l2esz: 0x%x for lh: 0x%x", (uint)l2esz, (uint)lh);
     return l2esz;
   }
-  static jint array_layout_helper(jint tag, bool null_free, int hsize, BasicType etype, int log2_esize) {
+  static jint array_layout_helper(jint tag, bool value_array, bool null_free, int hsize, BasicType etype, int log2_esize) {
     return (tag        << _lh_array_tag_shift)
+      |    ((value_array ? 1 : 0) << _lh_value_array_shift)
       |    ((null_free ? 1 : 0) <<  _lh_null_free_shift)
       |    (hsize      << _lh_header_size_shift)
       |    ((int)etype << _lh_element_type_shift)
@@ -638,6 +662,7 @@ protected:
   #undef assert_same_query
 
   inline bool is_null_free_array_klass()      const { return layout_helper_is_null_free(layout_helper()); }
+  inline bool is_value_array_klass()          const { return layout_helper_is_value_array(layout_helper()); }
 
   // Access flags
   AccessFlags access_flags() const         { return _access_flags;  }

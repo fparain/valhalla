@@ -277,8 +277,8 @@ ciType* ciTypeFlow::StateVector::type_meet_internal(ciType* t1, ciType* t2, ciTy
     return t1;
   }
   // Unwrap after saving nullness information and handling top meets
-  bool null_free1 = t1->is_null_free();
-  bool null_free2 = t2->is_null_free();
+  bool null_free1 = t1->is_marked_null_free();
+  bool null_free2 = t2->is_marked_null_free();
   if (t1->unwrap() == t2->unwrap() && null_free1 == null_free2) {
     return t1;
   }
@@ -620,7 +620,7 @@ void ciTypeFlow::StateVector::do_aload(ciBytecodeStream* str) {
 void ciTypeFlow::StateVector::do_checkcast(ciBytecodeStream* str) {
   bool will_link;
   ciKlass* klass = str->get_klass(will_link);
-  bool null_free = str->has_Q_signature() && !klass->as_inline_klass()->is_nullable_flattenable();
+  bool null_free = str->has_Q_signature() && klass->as_inline_klass()->is_null_free();
   if (!will_link) {
     if (null_free) {
       trap(str, klass,
@@ -637,7 +637,7 @@ void ciTypeFlow::StateVector::do_checkcast(ciBytecodeStream* str) {
     }
   } else {
     ciType* type = pop_value();
-    null_free |= type->is_null_free();
+    null_free |= type->is_marked_null_free();
     type = type->unwrap();
     if (type->is_loaded() && klass->is_loaded() &&
         type != klass && type->is_subtype_of(klass)) {
@@ -1002,7 +1002,7 @@ bool ciTypeFlow::StateVector::apply_one_bytecode(ciBytecodeStream* str) {
       if (!will_link) {
         trap(str, element_klass, str->get_klass_index());
       } else {
-        bool null_free = str->has_Q_signature() && !element_klass->as_inline_klass()->is_nullable_flattenable();
+        bool null_free = str->has_Q_signature() && element_klass->as_inline_klass()->is_null_free();
         push_object(ciArrayKlass::make(element_klass, null_free));
       }
       break;

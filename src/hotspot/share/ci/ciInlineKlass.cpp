@@ -93,8 +93,8 @@ bool ciInlineKlass::is_empty() {
   return nof_nonstatic_fields() == 0;
 }
 
-bool ciInlineKlass::is_nullable_flattenable() const {
-  GUARDED_VM_ENTRY(return to_InlineKlass()->is_nullable_flattenable();)
+bool ciInlineKlass::is_null_free() const {
+  GUARDED_VM_ENTRY(return to_InlineKlass()->is_null_free();)
 }
 
 int ciInlineKlass::null_pivot_offset() const {
