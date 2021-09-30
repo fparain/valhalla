@@ -784,8 +784,6 @@ void FieldLayoutBuilder::inline_class_field_sorting(TRAPS) {
   }
   _alignment = alignment;
   if (!_has_nonstatic_fields) {
-    ResourceMark rm;
-    tty->print_cr("Something is going to fail");
     // There are a number of fixes required throughout the type system and JIT
     Exceptions::fthrow(THREAD_AND_LOCATION,
                        vmSymbols::java_lang_ClassFormatError(),
