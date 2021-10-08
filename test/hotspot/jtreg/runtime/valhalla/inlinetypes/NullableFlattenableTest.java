@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@ import jdk.test.lib.Asserts;
  * @test
  * @summary Nullable Flattenable semantic test
  * @library /test/lib
- * @run main/othervm -Xbatch -XX:InlineFieldMaxFlatSize=64 -XX:FlatArrayElementMaxSize=16 runtime.valhalla.inlinetypes.NullableFlattenableTest
+ * @run main/othervm -XX:InlineFieldMaxFlatSize=64 -XX:FlatArrayElementMaxSize=16 runtime.valhalla.inlinetypes.NullableFlattenableTest
  */
 
 public class NullableFlattenableTest {
@@ -68,21 +68,17 @@ public class NullableFlattenableTest {
     NF[] array = new NF[10];
     BigNF[] array2 = new BigNF[10];
 
-    for (int i = 0; i < 100_000; ++i) {
     // Checkcast
     testCheckCast();
 
     // Arrays
     testUninitializedArrayElements(array, array2);
-    /*
     testWritingNonNullValueToArrays(array, array2);
     testWritingNullValueToArrays(array, array2);
     testArrayStoreException(array, new BigNF());
     testArrayStoreException(array2, new NF());
-*/
 
     // Static fields
-    snf = (NF)o;
     testStaticUninitializedFields();
     testWrittingNonNullValueToStaticField();
     testWrittingNullValueToStaticField();
@@ -93,7 +89,6 @@ public class NullableFlattenableTest {
 
     // test withfield
     testWrapper();
-    }
   }
 
   static void testCheckCast() {
@@ -103,13 +98,13 @@ public class NullableFlattenableTest {
   }
 
   static void testUninitializedArrayElements(NF[] array, BigNF[] array2) {
-  //  System.out.println("Reading uninitialized value element");
+    System.out.println("Reading uninitialized value element");
     Asserts.assertNull(array[1], "Uninitialized elements of arrays of nullable flattenable types must be null");
     Asserts.assertNull(array2[2], "Uninitialized elements of arrays of nullable flattenable types must be null");
   }
 
   static void testWritingNonNullValueToArrays(NF[] array, BigNF[] array2) {
-  //  System.out.println("Writting non null value to array");
+    System.out.println("Writting non null value to array");
     array[1] = new NF();
     Asserts.assertNotNull(array[1], "Failed to write a non-null value to a null nullable flattenable element");
     array2[2] = new BigNF();
@@ -117,7 +112,7 @@ public class NullableFlattenableTest {
   }
 
   static void testWritingNullValueToArrays(NF[] array, BigNF[] array2) {
-   // System.out.println("Writting null value to array");
+    System.out.println("Writting null value to array");
     Object o = null;
     array[1] = (NF)o;
     Asserts.assertNull(array[1], "Failed to write a null value to a nullable flattenable element");
@@ -136,21 +131,19 @@ public class NullableFlattenableTest {
   }
 
   static void test(NullableFlattenableTest nft) {
-    Object o = null;
-    nft.nf = (NF)o;
     nft.testUninitializedFields();
     nft.testWritingNonNullValue();
     nft.testWritingNullValue();
   }
 
   void testUninitializedFields() {
-//    System.out.println("Testing read uninitialized fields");
+    System.out.println("Testing read uninitialized fields");
     Asserts.assertNull(nf, "Uninitialized nullable flattenable fields must be null");
     Asserts.assertNull(bigNF, "Uninitialized nullable flattenable fields must be null");
   }
 
   void testWritingNonNullValue() {
-  //  System.out.println("Testing writing non null value");
+    System.out.println("Testing writing non null value");
     nf = new NF();
     Asserts.assertNotNull(nf, "Writing non-null value to null field failed");
     bigNF = new BigNF();
@@ -158,7 +151,7 @@ public class NullableFlattenableTest {
   }
 
   void testWritingNullValue() {
-  //  System.out.println("Testing writing null value");
+    System.out.println("Testing writing null value");
     Object o = null;
     NF n = (NF)o;
     Asserts.assertNull(n, "Just checking");
@@ -171,19 +164,19 @@ public class NullableFlattenableTest {
   }
 
   static void testStaticUninitializedFields() {
-   // System.out.println("Testing read uninitialized static fields");
+    System.out.println("Testing read uninitialized static fields");
     Asserts.assertNull(NullableFlattenableTest.snf, "Uninitialized nullable flattenable static fields must be null");
   }
 
   static void testWrittingNonNullValueToStaticField() {
-  //  System.out.println("Testing writting non null value to static field");
+    System.out.println("Testing writting non null value to static field");
     NF n = new NF();
     NullableFlattenableTest.snf = n;
     Asserts.assertNotNull(NullableFlattenableTest.snf, "Failed to write over null nullable flattenable field");
   }
 
   static void testWrittingNullValueToStaticField() {
-  //  System.out.println("Testing writting null value to static field");
+    System.out.println("Testing writting null value to static field");
     Object o = null;
     NF n = (NF)o;
     Asserts.assertNull(n, "Just checking");
