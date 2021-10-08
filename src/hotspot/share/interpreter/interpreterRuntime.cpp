@@ -526,8 +526,6 @@ JRT_ENTRY(void, InterpreterRuntime::value_array_load(JavaThread* current, arrayO
 JRT_END
 
 JRT_ENTRY(void, InterpreterRuntime::value_array_store(JavaThread* current, void* val, arrayOopDesc* array, int index))
-ResourceMark rm(THREAD);
-tty->print_cr("InterpreterRuntime::value_array_store");
   Klass* k = ((oopDesc*)array)->klass();
   if (k->is_flatArray_klass()) {
     flatArrayHandle vah(current, (flatArrayOop)array);
