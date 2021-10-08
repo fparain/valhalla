@@ -1351,9 +1351,9 @@ public:
   bool      is_stable() const { return _ary->_stable; }
 
   // Inline type array properties
-  bool is_flat()          const { return _ary->_elem->isa_inlinetype() != NULL; }
+  bool is_flat()          const { return klass() != NULL && klass()->is_flat_array_klass(); }
   bool is_not_flat()      const { return _ary->_not_flat; }
-  bool is_null_free()     const { return is_flat() || (_ary->_elem->make_ptr() != NULL && _ary->_elem->make_ptr()->is_inlinetypeptr() && !_ary->_elem->make_ptr()->maybe_null()); }
+  bool is_null_free()     const { return elem()->make_ptr() != NULL && elem()->make_ptr()->is_inlinetypeptr() && !elem()->make_ptr()->maybe_null(); }
   bool is_not_null_free() const { return _ary->_not_null_free; }
 
   bool is_autobox_cache() const { return _is_autobox_cache; }

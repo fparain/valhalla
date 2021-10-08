@@ -2438,6 +2438,7 @@ bool LibraryCallKit::inline_unsafe_access(bool is_store, const BasicType type, c
         mismatched = true;
       }
     } else if (adr_type->isa_aryptr()) {
+      // TODO
       const Type* elem = adr_type->is_aryptr()->elem();
       if (!elem->isa_inlinetype()) {
         mismatched = true;
@@ -3860,7 +3861,7 @@ bool LibraryCallKit::inline_array_copyOf(bool is_copyOfRange) {
     ciKlass* klass = _gvn.type(klass_node)->is_klassptr()->klass();
     bool exclude_flat = UseFlatArray && bs->array_copy_requires_gc_barriers(true, T_OBJECT, false, false, BarrierSetC2::Parsing) &&
                         // Can src array be flat and contain oops?
-                        (orig_t == NULL || (!orig_t->is_not_flat() && (!orig_t->is_flat() || orig_t->elem()->inline_klass()->contains_oops()))) &&
+                        (orig_t == NULL || (!orig_t->is_not_flat() && (!orig_t->is_flat() || orig_t->elem()->make_ptr()->inline_klass()->contains_oops()))) &&
                         // Can dest array be flat and contain oops?
                         klass->can_be_inline_array_klass() && (!klass->is_flat_array_klass() || klass->as_flat_array_klass()->element_klass()->as_inline_klass()->contains_oops());
     Node* not_objArray = exclude_flat ? generate_non_objArray_guard(klass_node, bailout) : generate_typeArray_guard(klass_node, bailout);
@@ -4603,7 +4604,7 @@ bool LibraryCallKit::inline_native_clone(bool is_virtual) {
       const TypeAryPtr* ary_ptr = obj_type->isa_aryptr();
       if (UseFlatArray && bs->array_copy_requires_gc_barriers(true, T_OBJECT, true, false, BarrierSetC2::Expansion) &&
           obj_type->klass()->can_be_inline_array_klass() &&
-          (ary_ptr == NULL || (!ary_ptr->is_not_flat() && (!ary_ptr->is_flat() || ary_ptr->elem()->inline_klass()->contains_oops())))) {
+          (ary_ptr == NULL || (!ary_ptr->is_not_flat() && (!ary_ptr->is_flat() || ary_ptr->elem()->make_ptr()->inline_klass()->contains_oops())))) {
         // Flattened inline type array may have object field that would require a
         // write barrier. Conservatively, go to slow path.
         generate_flatArray_guard(obj_klass, slow_region);

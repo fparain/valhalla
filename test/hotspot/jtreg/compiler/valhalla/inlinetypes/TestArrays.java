@@ -749,10 +749,7 @@ public class TestArrays {
     // TODO 8227588: shouldn't this have the same IR matching rules as test6?
     // @Test(failOn = ALLOC + ALLOCA + LOOP + LOAD + STORE + TRAP)
     @Test
-    @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOCA, LOOP, LOAD, TRAP})
-    @IR(applyIf = {"FlatArrayElementMaxSize", "!= -1"},
-        failOn = {ALLOCA, LOOP, TRAP})
+    @IR(failOn = {ALLOCA, LOOP, TRAP})
     public MyValue2 test29(MyValue2[] src) {
         MyValue2[] dst = new MyValue2[10];
         System.arraycopy(src, 0, dst, 0, 10);
@@ -1979,10 +1976,9 @@ public class TestArrays {
         Asserts.assertEquals(array2[1], null);
     }
 
-    // Verify that writing constant null into an array marks the array as not-null-free and not-flat
+    // Verify that writing constant null into an array marks the array as not-null-free
     @Test
-    @IR(failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE, STORE_UNKNOWN_INLINE},
-        counts = {INLINE_ARRAY_NULL_GUARD, "= 1"})
+    @IR(counts = {INLINE_ARRAY_NULL_GUARD, "= 1"})
     public Object test84(Object[] array, int i) {
         array[0] = null;
         array[1] = null;
@@ -2012,7 +2008,7 @@ public class TestArrays {
 
     // Same as test84 but with branches
     @Test
-    @IR(failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE, STORE_UNKNOWN_INLINE},
+    @IR(failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE},
         counts = {INLINE_ARRAY_NULL_GUARD, "= 2"})
     public void test85(Object[] array, Object o, boolean b) {
         if (b) {

@@ -1802,6 +1802,7 @@ const TypeFunc* OptoRuntime::load_unknown_inline_type() {
 
 JRT_LEAF(void, OptoRuntime::store_unknown_inline(instanceOopDesc* buffer, flatArrayOopDesc* array, int index))
 {
+  // TODO adjust comment, null check should have happened in caller
   assert(buffer != NULL, "can't store null into flat array");
   array->value_copy_to_index(buffer, index);
 }

@@ -82,6 +82,7 @@ public class NullableFlattenableTest {
     testStaticUninitializedFields();
     testWrittingNonNullValueToStaticField();
     testWrittingNullValueToStaticField();
+
     // Non-static fields
     // running test twice to test quickened bytecodes
     test(new NullableFlattenableTest());

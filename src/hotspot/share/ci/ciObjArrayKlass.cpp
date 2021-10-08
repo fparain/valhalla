@@ -144,7 +144,7 @@ ciObjArrayKlass* ciObjArrayKlass::make_impl(ciKlass* element_klass, bool null_fr
     EXCEPTION_CONTEXT;
     // The element klass is loaded
     Klass* array;
-    if (null_free) {
+    if (false && null_free) {
       assert(element_klass->get_Klass()->is_inline_klass(), "Only inline classes can have null free arrays");
       array = InlineKlass::cast(element_klass->get_Klass())->value_array_klass(THREAD);
     } else {

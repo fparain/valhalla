@@ -2257,7 +2257,7 @@ public class TestNullableArrays {
 
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC, LOOP, STORE, TRAP})
+        failOn = {ALLOC, LOOP, TRAP})
     public static MyValue1.ref[] test84(MyValue1 vt1, MyValue1.ref vt2) {
         MyValue1.ref[] result = new MyValue1[2];
         result[0] = vt1;
@@ -3112,7 +3112,7 @@ public class TestNullableArrays {
 
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC_G, STORE})
+        failOn = {ALLOC_G})
     public void test121(boolean b) {
         Object o = null;
         if (b) {
@@ -3141,7 +3141,7 @@ public class TestNullableArrays {
 
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC_G, STORE})
+        failOn = {ALLOC_G})
     public void test122(boolean b) {
         Object o = null;
         if (b) {

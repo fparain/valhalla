@@ -910,8 +910,12 @@ Node* InlineTypeNode::is_loaded(PhaseGVN* phase, ciInlineKlass* vk, Node* base, 
     vk = inline_klass();
   }
   if (field_count() == 0) {
-    assert(is_allocated(phase), "must be allocated");
-    return get_oop();
+    if (vk->is_null_free()) {
+      assert(is_allocated(phase), "must be allocated");
+      return get_oop();
+    } else {
+      return NULL;
+    }
   }
   for (uint i = 0; i < field_count(); ++i) {
     int offset = holder_offset + field_offset(i);
@@ -1001,6 +1005,7 @@ int InlineTypeNode::initialize_fields(GraphKit* kit, MultiNode* multi, uint& bas
     max++;
     pivot_offset = vk->null_pivot_offset();
   }
+  vk->nof_nonstatic_fields();
   for (uint i = 0; i < max; ++i) {
     bool is_pivot = false;
     Node* parm = NULL;

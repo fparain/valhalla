@@ -324,8 +324,9 @@ ciType* ciTypeFlow::StateVector::type_meet_internal(ciType* t1, ciType* t2, ciTy
     // But when (obj/flat)Array meets (obj/flat)Array, we look carefully at element types.
     if ((k1->is_obj_array_klass() || k1->is_flat_array_klass()) &&
         (k2->is_obj_array_klass() || k2->is_flat_array_klass())) {
-      bool null_free = k1->as_array_klass()->is_elem_null_free() &&
-                       k2->as_array_klass()->is_elem_null_free();
+      // TODO is this incorrect?
+      bool is_Q = (k1->as_array_klass()->is_flat_array_klass() || k1->as_array_klass()->is_elem_null_free()) &&
+                  (k2->as_array_klass()->is_flat_array_klass() || k2->as_array_klass()->is_elem_null_free());
       ciType* elem1 = k1->as_array_klass()->element_klass();
       ciType* elem2 = k2->as_array_klass()->element_klass();
       ciType* elem = elem1;
@@ -334,13 +335,13 @@ ciType* ciTypeFlow::StateVector::type_meet_internal(ciType* t1, ciType* t2, ciTy
       }
       // Do an easy shortcut if one type is a super of the other.
       if (elem == elem1 && !elem->is_inlinetype()) {
-        assert(k1 == ciArrayKlass::make(elem, null_free), "shortcut is OK");
+        assert(k1 == ciArrayKlass::make(elem, is_Q), "shortcut is OK");
         return k1;
       } else if (elem == elem2 && !elem->is_inlinetype()) {
-        assert(k2 == ciArrayKlass::make(elem, null_free), "shortcut is OK");
+        assert(k2 == ciArrayKlass::make(elem, is_Q), "shortcut is OK");
         return k2;
       } else {
-        return ciArrayKlass::make(elem, null_free);
+        return ciArrayKlass::make(elem, is_Q);
       }
     } else {
       return object_klass;
@@ -1002,8 +1003,7 @@ bool ciTypeFlow::StateVector::apply_one_bytecode(ciBytecodeStream* str) {
       if (!will_link) {
         trap(str, element_klass, str->get_klass_index());
       } else {
-        bool null_free = str->has_Q_signature() && element_klass->as_inline_klass()->is_null_free();
-        push_object(ciArrayKlass::make(element_klass, null_free));
+        push_object(ciArrayKlass::make(element_klass, str->has_Q_signature()));
       }
       break;
     }

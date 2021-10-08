@@ -560,6 +560,11 @@ GrowableArray<ciField*>* ciInstanceKlass::compute_nonstatic_fields_impl(Growable
     if (fs.access_flags().is_static())  continue;
     flen += 1;
   }
+  for (AllFieldStream fs(k); !fs.done(); fs.next()) {
+    if (fs.name() == vmSymbols::null_pivot_name() && flatten) {
+      flen += 1;
+    }
+  }
 
   // allocate the array:
   if (flen == 0) {
@@ -574,12 +579,11 @@ GrowableArray<ciField*>* ciInstanceKlass::compute_nonstatic_fields_impl(Growable
     fields->appendAll(super_fields);
   }
 
-  for (InternalFieldStream fs(k); !fs.done(); fs.next()) {
+  for (AllFieldStream fs(k); !fs.done(); fs.next()) {
     if (fs.name() == vmSymbols::null_pivot_name() && flatten) {
       fieldDescriptor& fd = fs.field_descriptor();
       ciField* field = new (arena) ciField(&fd);
       fields->append(field);
-      flen += 1;
     }
   }
 

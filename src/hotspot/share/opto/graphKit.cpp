@@ -3705,7 +3705,7 @@ Node* GraphKit::gen_checkcast(Node *obj, Node* superklass, Node* *failure_contro
   record_for_igvn(region);
 
   bool not_inline = !toop->can_be_inline_type();
-  bool not_flattened = !UseFlatArray || not_inline || (toop->is_inlinetypeptr() && !toop->inline_klass()->flatten_array());
+  bool not_flattened = not_inline || (toop->is_inlinetypeptr() && !toop->inline_klass()->flatten_array());
   if (EnableValhalla && not_flattened) {
     // Check if obj has been loaded from an array
     obj = obj->isa_DecodeN() ? obj->in(1) : obj;
@@ -3729,8 +3729,8 @@ Node* GraphKit::gen_checkcast(Node *obj, Node* superklass, Node* *failure_contro
       const TypeAryPtr* ary_t = _gvn.type(array)->isa_aryptr();
       if (ary_t != NULL) {
         if (!ary_t->is_not_null_free() && not_inline) {
-          // Casting array element to a non-inline-type, mark array as not null-free.
-          Node* cast = _gvn.transform(new CheckCastPPNode(control(), array, ary_t->cast_to_not_null_free()));
+          // Casting array element to a non-inline-type, mark array as not null-free and not flat.
+          Node* cast = _gvn.transform(new CheckCastPPNode(control(), array, ary_t->cast_to_not_null_free()->cast_to_not_flat()));
           replace_in_map(array, cast);
         } else if (!ary_t->is_not_flat()) {
           // Casting array element to a non-flattened type, mark array as not flat.
@@ -3800,7 +3800,10 @@ Node* GraphKit::null_free_array_test(Node* klass, bool null_free) {
 
 // Deoptimize if 'ary' is a null-free inline type array and 'val' is null
 Node* GraphKit::inline_array_null_guard(Node* ary, Node* val, int nargs, bool safe_for_replace) {
+  const TypeAryPtr* ary_t = _gvn.type(ary)->is_aryptr();
+  assert(!ary_t->is_not_null_free(), "Array is not null-free");
   const Type* val_t = _gvn.type(val);
+  // TODO adjust
   if (val->is_InlineType() || !TypePtr::NULL_PTR->higher_equal(val_t)) {
     return ary; // Never null
   }
@@ -3824,7 +3827,6 @@ Node* GraphKit::inline_array_null_guard(Node* ary, Node* val, int nargs, bool sa
   record_for_igvn(region);
   if (val_t == TypePtr::NULL_PTR) {
     // Since we were just successfully storing null, the array can't be null free.
-    const TypeAryPtr* ary_t = _gvn.type(ary)->is_aryptr();
     ary_t = ary_t->cast_to_not_null_free();
     Node* cast = _gvn.transform(new CheckCastPPNode(control(), ary, ary_t));
     if (safe_for_replace) {

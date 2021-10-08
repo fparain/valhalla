@@ -439,7 +439,7 @@ public class TestLWorldProfiling {
         counts = {NULL_CHECK_TRAP, "= 2"},
         failOn = {STORE_UNKNOWN_INLINE})
     @IR(applyIfAnd = {"UseArrayLoadStoreProfile", "false", "TypeProfileLevel", "!= 222"},
-        counts = {NULL_CHECK_TRAP, "= 3", STORE_UNKNOWN_INLINE, "= 1"})
+        counts = {NULL_CHECK_TRAP, "= 2", STORE_UNKNOWN_INLINE, "= 1"})
     public void test15(Object[] array, Object v) {
         array[0] = v;
     }
@@ -461,7 +461,7 @@ public class TestLWorldProfiling {
         counts = {NULL_CHECK_TRAP, "= 2"},
         failOn = {STORE_UNKNOWN_INLINE})
     @IR(applyIf = {"UseArrayLoadStoreProfile", "false"},
-        counts = {NULL_CHECK_TRAP, "= 3", STORE_UNKNOWN_INLINE, "= 1"})
+        counts = {NULL_CHECK_TRAP, "= 2", STORE_UNKNOWN_INLINE, "= 1"})
     public void test16(Object[] array, Object v) {
         array[0] = v;
     }
@@ -484,7 +484,7 @@ public class TestLWorldProfiling {
         counts = {NULL_CHECK_TRAP, "= 1"},
         failOn = {STORE_UNKNOWN_INLINE})
     @IR(applyIf = {"UseArrayLoadStoreProfile", "false"},
-        counts = {NULL_CHECK_TRAP, "= 3", STORE_UNKNOWN_INLINE, "= 1"})
+        counts = {NULL_CHECK_TRAP, "= 2", STORE_UNKNOWN_INLINE, "= 1"})
     public void test17(Object[] array, Object v) {
         array[0] = v;
     }
@@ -507,7 +507,7 @@ public class TestLWorldProfiling {
         counts = {NULL_CHECK_TRAP, "= 1"},
         failOn = {STORE_UNKNOWN_INLINE})
     @IR(applyIf = {"UseArrayLoadStoreProfile", "false"},
-        counts = {NULL_CHECK_TRAP, "= 3", STORE_UNKNOWN_INLINE, "= 1"})
+        counts = {NULL_CHECK_TRAP, "= 2", STORE_UNKNOWN_INLINE, "= 1"})
     public Object test18(Object[] array, Object v1) {
         Object v2 = array[0];
         test18_helper(array, v1);

@@ -335,25 +335,21 @@ public class TestNullableQTypes {
         Asserts.assertEquals(test5_field2, vt);
     }
 
-// TODO enable once interpreter is fixed
-//    static primitive class Empty2 implements NullableFlattenable {
-    static primitive class Empty2 {
+    static primitive class Empty2 implements NullableFlattenable {
 
     }
 
-// TODO enable once interpreter is fixed
-//    static primitive class Empty1 implements NullableFlattenable {
-    static primitive class Empty1 {
+    static primitive class Empty1 implements NullableFlattenable {
         Empty2 empty2 = Empty2.default;
-
     }
 
-// TODO enable once interpreter is fixed
-//    static primitive class Container implements NullableFlattenable {
-    static primitive class Container {
+    static primitive class Container implements NullableFlattenable {
         int x = 0;
-        Empty1 empty1 = Empty1.default;
+        Empty1 empty1;
         Empty2 empty2 = Empty2.default;
+        public Container(Empty1 val) {
+            empty1 = val;
+        }
     }
 
     @DontInline
@@ -374,9 +370,10 @@ public class TestNullableQTypes {
     // Test scalarization in calls and returns with empty nullable inline types
     @Test
     public Empty1 test6(Empty1 vt) {
+        Object NULL = null;
         Empty1 empty1 = test6_helper1(vt);
-        test6_helper2(empty1.empty2);
-        Container c = test6_helper3(new Container());
+        test6_helper2((empty1 != NULL) ? empty1.empty2 : (Empty2)NULL);
+        Container c = test6_helper3(new Container(empty1));
         return c.empty1;
     }
 
@@ -385,8 +382,7 @@ public class TestNullableQTypes {
     public void test6_verifier() {
         Object NULL = null;
         Asserts.assertEQ(test6(Empty1.default), Empty1.default);
-// TODO enable once interpreter is fixed
-//        Asserts.assertEQ(test6((Empty1)NULL), null);
+        Asserts.assertEQ(test6((Empty1)NULL), null);
     }
 
     @DontCompile
@@ -2730,7 +2726,7 @@ public class TestNullableQTypes {
             field = val;
         }
     }
-    
+
     public static primitive class Test97C2 implements NullableFlattenable {
         Test97C1 field;
         public Test97C2(Test97C1 val) {

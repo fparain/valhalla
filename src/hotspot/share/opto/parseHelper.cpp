@@ -262,6 +262,7 @@ Node* Parse::array_store_check(Node*& adr, const Type*& elemtype) {
                                                        immutable_memory(), p2, tak));
 
   // If we statically know that this is an inline type array, use precise element klass for checkcast
+  // TODO
   if (!elemtype->isa_inlinetype()) {
     elemtype = elemtype->make_oopptr();
   }

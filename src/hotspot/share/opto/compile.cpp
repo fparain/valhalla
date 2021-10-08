@@ -1358,18 +1358,18 @@ const TypePtr *Compile::flatten_alias_type( const TypePtr *tj ) const {
       tj = ta = TypeAryPtr::make(ptr,ta->const_oop(),tary,ta->klass(),false,Type::Offset(offset), ta->field_offset());
     }
     // Arrays of known objects become arrays of unknown objects.
-    if (ta->elem()->isa_narrowoop() && ta->elem() != TypeNarrowOop::BOTTOM) {
+    if (!ta->is_flat() && ta->elem()->isa_narrowoop() && ta->elem() != TypeNarrowOop::BOTTOM) {
       const TypeAry *tary = TypeAry::make(TypeNarrowOop::BOTTOM, ta->size());
       tj = ta = TypeAryPtr::make(ptr,ta->const_oop(),tary,NULL,false,Type::Offset(offset), ta->field_offset());
     }
-    if (ta->elem()->isa_oopptr() && ta->elem() != TypeInstPtr::BOTTOM) {
+    if (!ta->is_flat() && ta->elem()->isa_oopptr() && ta->elem() != TypeInstPtr::BOTTOM) {
       const TypeAry *tary = TypeAry::make(TypeInstPtr::BOTTOM, ta->size());
       tj = ta = TypeAryPtr::make(ptr,ta->const_oop(),tary,NULL,false,Type::Offset(offset), ta->field_offset());
     }
     // Initially all flattened array accesses share a single slice
     if (ta->is_flat() && ta->elem() != TypeInlineType::BOTTOM && _flattened_accesses_share_alias) {
-      const TypeAry *tary = TypeAry::make(TypeInlineType::BOTTOM, ta->size());
-      tj = ta = TypeAryPtr::make(ptr,ta->const_oop(),tary,NULL,false,Type::Offset(offset), Type::Offset(Type::OffsetBot));
+      const TypeAry* tary = TypeAry::make(TypeInlineType::BOTTOM, ta->size());
+      tj = ta = TypeAryPtr::make(ptr, ta->const_oop(), tary, NULL, false, Type::Offset(offset), Type::Offset(Type::OffsetBot));
     }
     // Arrays of bytes and of booleans both use 'bastore' and 'baload' so
     // cannot be distinguished by bytecode alone.
@@ -1681,9 +1681,9 @@ Compile::AliasType* Compile::find_alias_type(const TypePtr* adr_type, bool no_cr
         alias_type(idx)->set_element(elemtype);
       }
       int field_offset = flat->is_aryptr()->field_offset().get();
-      if (elemtype->isa_inlinetype() &&
+      if (flat->is_aryptr()->is_flat() &&
           field_offset != Type::OffsetBot) {
-        ciInlineKlass* vk = elemtype->inline_klass();
+        ciInlineKlass* vk = elemtype->make_ptr()->inline_klass();
         field_offset += vk->first_field_offset();
         field = vk->get_field_by_offset(field_offset, false);
       }

@@ -1022,7 +1022,7 @@ Node* LoadNode::can_see_arraycopy_value(Node* st, PhaseGVN* phase) const {
       BasicType ary_elem = ary_t->klass()->as_array_klass()->element_type()->basic_type();
       uint header = arrayOopDesc::base_offset_in_bytes(ary_elem);
       uint shift  = exact_log2(type2aelembytes(ary_elem));
-      if (ary_t->klass()->is_flat_array_klass()) {
+      if (ary_t->is_flat()) {
         ciFlatArrayKlass* vak = ary_t->klass()->as_flat_array_klass();
         shift = vak->log2_element_size();
       }
@@ -2387,8 +2387,8 @@ const Type* LoadNode::klass_value_common(PhaseGVN* phase) const {
             offset == java_lang_Class::array_klass_offset())) {
       // We are loading a special hidden field from a Class mirror object,
       // the field which points to the VM's Klass metaobject.
-      bool null_free = false;
-      ciType* t = tinst->java_mirror_type(&null_free);
+      bool is_Q = false;
+      ciType* t = tinst->java_mirror_type(&is_Q);
       // java_mirror_type returns non-null for compile-time Class constants.
       if (t != NULL) {
         // constant oop => constant klass
@@ -2398,8 +2398,7 @@ const Type* LoadNode::klass_value_common(PhaseGVN* phase) const {
             // klass.  Users of this result need to do a null check on the returned klass.
             return TypePtr::NULL_PTR;
           }
-          // TODO
-          return TypeKlassPtr::make(ciArrayKlass::make(t, null_free));
+          return TypeKlassPtr::make(ciArrayKlass::make(t, is_Q));
         }
         if (!t->is_klass()) {
           // a primitive Class (e.g., int.class) has NULL for a klass field

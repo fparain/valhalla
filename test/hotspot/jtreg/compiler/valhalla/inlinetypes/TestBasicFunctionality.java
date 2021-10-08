@@ -281,8 +281,7 @@ public class TestBasicFunctionality {
     // Test loop with uncommon trap referencing an inline type
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        counts = {SCOBJ, ">= 1"}, // at least 1
-        failOn = LOAD)
+        counts = {SCOBJ, ">= 1"})
     public long test12(boolean b) {
         MyValue1 v = MyValue1.createWithFieldsInline(rI, rL);
         MyValue1[] va = new MyValue1[Math.abs(rI) % 10];
@@ -674,7 +673,7 @@ public class TestBasicFunctionality {
     // Verify that C2 recognizes inline type loads and re-uses the oop to avoid allocations
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC, ALLOCA, STORE})
+        failOn = {ALLOC, ALLOCA})
     public MyValue3 test30(MyValue3[] va) {
         // C2 can re-use the oop of staticVal3 because staticVal3 is equal to copy
         MyValue3 copy = MyValue3.copy(staticVal3);
@@ -696,7 +695,7 @@ public class TestBasicFunctionality {
     // Verify that C2 recognizes inline type loads and re-uses the oop to avoid allocations
     @Test
     @IR(applyIf = {"InlineTypePassFieldsAsArgs", "false"},
-        failOn = {ALLOC, ALLOCA, STORE})
+        failOn = {ALLOC, ALLOCA})
     public MyValue3 test31(MyValue3[] va) {
         // C2 can re-use the oop returned by createDontInline()
         // because the corresponding inline type is equal to 'copy'.
@@ -718,7 +717,7 @@ public class TestBasicFunctionality {
     // Verify that C2 recognizes inline type loads and re-uses the oop to avoid allocations
     @Test
     @IR(applyIf = {"InlineTypePassFieldsAsArgs", "false"},
-        failOn = {ALLOC, ALLOCA, STORE})
+        failOn = {ALLOC, ALLOCA})
     public MyValue3 test32(MyValue3 vt, MyValue3[] va) {
         // C2 can re-use the oop of vt because vt is equal to 'copy'.
         MyValue3 copy = MyValue3.copy(vt);
@@ -764,7 +763,7 @@ public class TestBasicFunctionality {
     // C2 code should load and use the default oop from the java mirror.
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC, ALLOCA, LOAD, STORE, LOOP, TRAP})
+        failOn = {ALLOC, ALLOCA, LOOP, TRAP})
     public MyValue3 test34(MyValue3[] va) {
         // Explicitly create default value
         MyValue3 vt = MyValue3.createDefault();
@@ -797,7 +796,7 @@ public class TestBasicFunctionality {
     // Same as above but manually initialize inline type fields to default.
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        failOn = {ALLOC, ALLOCA, LOAD, STORE, LOOP, TRAP})
+        failOn = {ALLOC, ALLOCA, LOOP, TRAP})
     public MyValue3 test35(MyValue3 vt, MyValue3[] va) {
         vt = MyValue3.setC(vt, (char)0);
         vt = MyValue3.setBB(vt, (byte)0);

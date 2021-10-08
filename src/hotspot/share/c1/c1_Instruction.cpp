@@ -287,6 +287,7 @@ ciType* NewTypeArray::exact_type() const {
 }
 
 ciType* NewObjectArray::exact_type() const {
+  // TODO
   return ciArrayKlass::make(klass(), is_null_free());
 }
 

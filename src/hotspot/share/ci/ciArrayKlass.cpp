@@ -102,12 +102,12 @@ bool ciArrayKlass::is_leaf_type() {
 // ciArrayKlass::base_element_type
 //
 // What type is obtained when this array is indexed as many times as possible?
-ciArrayKlass* ciArrayKlass::make(ciType* element_type, bool null_free) {
+ciArrayKlass* ciArrayKlass::make(ciType* element_type, bool is_Q) {
   if (element_type->is_primitive_type()) {
     return ciTypeArrayKlass::make(element_type->basic_type());
   } else {
     ciKlass* klass = element_type->as_klass();
-    if (null_free && klass->is_loaded()) {
+    if (is_Q && klass->is_loaded()) {
       GUARDED_VM_ENTRY(
         EXCEPTION_CONTEXT;
         Klass* ak = InlineKlass::cast(klass->get_Klass())->value_array_klass(THREAD);
@@ -115,10 +115,13 @@ ciArrayKlass* ciArrayKlass::make(ciType* element_type, bool null_free) {
           CLEAR_PENDING_EXCEPTION;
         } else if (ak != NULL && ak->is_flatArray_klass()) {
           return ciFlatArrayKlass::make(klass);
+        } else if (ak != NULL && ak->is_objArray_klass()) {
+          return CURRENT_THREAD_ENV->get_obj_array_klass(ak);
         }
       )
     }
-    return ciObjArrayKlass::make(klass, null_free);
+    // TODO
+    return ciObjArrayKlass::make(klass, element_type->is_inlinetype() && element_type->as_inline_klass()->is_null_free());
   }
 }
 

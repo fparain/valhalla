@@ -612,10 +612,10 @@ Parse::Parse(JVMState* caller, ciMethod* parse_method, float expected_uses)
       map()->replace_edge(parm, vt);
     } else if (UseTypeSpeculation && (i == (uint)(arg_size_sig - 1)) && !is_osr_parse() &&
                method()->has_vararg() && t->isa_aryptr() != NULL && !t->is_aryptr()->is_not_null_free()) {
-      // Speculate on varargs Object array being not null-free (and therefore also not flattened)
+      // Speculate on varargs Object array being not null-free and not-flat
       const TypePtr* spec_type = t->speculative();
       spec_type = (spec_type != NULL && spec_type->isa_aryptr() != NULL) ? spec_type : t->is_aryptr();
-      spec_type = spec_type->remove_speculative()->is_aryptr()->cast_to_not_null_free();
+      spec_type = spec_type->remove_speculative()->is_aryptr()->cast_to_not_null_free()->cast_to_not_flat();
       spec_type = TypeOopPtr::make(TypePtr::BotPTR, Type::Offset::bottom, TypeOopPtr::InstanceBot, spec_type);
       Node* cast = _gvn.transform(new CheckCastPPNode(control(), parm, t->join_speculative(spec_type)));
       replace_in_map(parm, cast);

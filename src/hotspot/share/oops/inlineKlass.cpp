@@ -246,7 +246,7 @@ int InlineKlass::collect_fields(GrowableArray<SigEntry>* sig, int base_off) {
   int count = 0;
   SigEntry::add_entry(sig, T_INLINE_TYPE, name(), base_off);
 
-  for (InternalFieldStream fs(this); !fs.done(); fs.next()) {
+  for (AllFieldStream fs(this); !fs.done(); fs.next()) {
     if (fs.name() == vmSymbols::null_pivot_name()) {
       fieldDescriptor& fd = fs.field_descriptor();
       int offset = base_off + fs.offset() - (base_off > 0 ? first_field_offset() : 0);
