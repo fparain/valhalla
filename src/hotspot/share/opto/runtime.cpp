@@ -110,6 +110,7 @@ address OptoRuntime::_rethrow_Java                                = NULL;
 
 address OptoRuntime::_slow_arraycopy_Java                         = NULL;
 address OptoRuntime::_register_finalizer_Java                     = NULL;
+address OptoRuntime::_load_unknown_inline                         = NULL;
 
 ExceptionBlob* OptoRuntime::_exception_blob;
 
@@ -153,6 +154,8 @@ bool OptoRuntime::generate(ciEnv* env) {
 
   gen(env, _slow_arraycopy_Java            , slow_arraycopy_Type          , SharedRuntime::slow_arraycopy_C ,    0 , false, false);
   gen(env, _register_finalizer_Java        , register_finalizer_Type      , register_finalizer              ,    0 , false, false);
+
+  gen(env, _load_unknown_inline            , load_unknown_inline_type     , load_unknown_inline             ,    0 , true, false);
 
   return true;
 }
@@ -1775,27 +1778,46 @@ const TypeFunc *OptoRuntime::pack_inline_type_Type() {
   return TypeFunc::make(domain, range);
 }
 
-JRT_LEAF(void, OptoRuntime::load_unknown_inline(flatArrayOopDesc* array, int index, instanceOopDesc* buffer))
-{
-  array->value_copy_from_index(index, buffer);
-}
+JRT_BLOCK_ENTRY(void, OptoRuntime::load_unknown_inline(flatArrayOopDesc* array, int index, JavaThread* current))
+  JRT_BLOCK;
+  // TODO what about exceptions, deopt?
+  flatArrayHandle vah(current, array);
+  FlatArrayKlass* vaklass = FlatArrayKlass::cast(vah()->klass());
+  InlineKlass* vk = vaklass->element_klass();
+
+  jboolean is_valid = true;
+  if (!vk->is_null_free()) {
+    int pivot_offset = ((address)array->value_at_addr(index, vaklass->layout_helper())) - (address)array
+                        + vk->null_pivot_offset() - vk->first_field_offset();
+    is_valid = array->bool_field(pivot_offset);
+  }
+  if (is_valid) {
+    oop buffer = flatArrayOopDesc::value_alloc_copy_from_index(vah, index, CHECK);
+    current->set_vm_result(buffer);
+  } else {
+    current->set_vm_result(NULL);
+  }
+  JRT_BLOCK_END;
 JRT_END
 
 const TypeFunc* OptoRuntime::load_unknown_inline_type() {
   // create input type (domain)
-  const Type** fields = TypeTuple::fields(3);
+  const Type** fields = TypeTuple::fields(2);
   // We don't know the number of returned values and their
   // types. Assume all registers available to the return convention
   // are used.
   fields[TypeFunc::Parms] = TypeOopPtr::NOTNULL;
   fields[TypeFunc::Parms+1] = TypeInt::POS;
-  fields[TypeFunc::Parms+2] = TypeInstPtr::NOTNULL;
 
-  const TypeTuple* domain = TypeTuple::make(TypeFunc::Parms+3, fields);
+  const TypeTuple* domain = TypeTuple::make(TypeFunc::Parms+2, fields);
 
   // create result type (range)
-  fields = TypeTuple::fields(0);
-  const TypeTuple* range = TypeTuple::make(TypeFunc::Parms+0, fields);
+  fields = TypeTuple::fields(1);
+  // TODO fix
+  fields[TypeFunc::Parms+0] = TypeInstPtr::BOTTOM;
+  //fields[TypeFunc::Parms+0] = TypeInstPtr::NOTNULL;
+
+  const TypeTuple* range = TypeTuple::make(TypeFunc::Parms+1, fields);
 
   return TypeFunc::make(domain, range);
 }

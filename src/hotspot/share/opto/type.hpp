@@ -772,8 +772,8 @@ public:
 //------------------------------TypeAry----------------------------------------
 // Class of Array Types
 class TypeAry : public Type {
-  TypeAry(const Type* elem, const TypeInt* size, bool stable, bool not_flat, bool not_null_free) : Type(Array),
-      _elem(elem), _size(size), _stable(stable), _not_flat(not_flat), _not_null_free(not_null_free) {}
+  TypeAry(const Type* elem, const TypeInt* size, bool stable, bool flat, bool not_flat, bool not_null_free) : Type(Array),
+      _elem(elem), _size(size), _stable(stable), _flat(flat), _not_flat(not_flat), _not_null_free(not_null_free) {}
 public:
   virtual bool eq( const Type *t ) const;
   virtual int  hash() const;             // Type specific hashing
@@ -786,6 +786,7 @@ private:
   const bool _stable;           // Are elements @Stable?
 
   // Inline type array properties
+  const bool _flat;             // Array is flat
   const bool _not_flat;         // Array is never flattened
   const bool _not_null_free;    // Array is never null-free
 
@@ -793,7 +794,7 @@ private:
 
 public:
   static const TypeAry* make(const Type* elem, const TypeInt* size, bool stable = false,
-                             bool not_flat = false, bool not_null_free = false);
+                             bool flat = false, bool not_flat = false, bool not_null_free = false);
 
   virtual const Type *xmeet( const Type *t ) const;
   virtual const Type *xdual() const;    // Compute dual right now.
@@ -1351,7 +1352,7 @@ public:
   bool      is_stable() const { return _ary->_stable; }
 
   // Inline type array properties
-  bool is_flat()          const { return klass() != NULL && klass()->is_flat_array_klass(); }
+  bool is_flat()          const { return _ary->_flat; }
   bool is_not_flat()      const { return _ary->_not_flat; }
   bool is_null_free()     const { return elem()->make_ptr() != NULL && elem()->make_ptr()->is_inlinetypeptr() && !elem()->make_ptr()->maybe_null(); }
   bool is_not_null_free() const { return _ary->_not_null_free; }

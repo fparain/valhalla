@@ -1854,7 +1854,7 @@ public class TestArrays {
     // Verify that casting an array element to a non-flattenable type marks the array as not-flat
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        counts = {ALLOC_G, "= 1", LOAD_UNKNOWN_INLINE, "= 1"})
+        counts = {LOAD_UNKNOWN_INLINE, "= 1"})
     @IR(applyIf = {"FlatArrayElementMaxSize", "!= -1"},
         failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE})
     public Object test79(Object[] array, int i) {
@@ -1875,7 +1875,7 @@ public class TestArrays {
     // Same as test79 but with not-flattenable inline type
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        counts = {ALLOC_G, "= 1", LOAD_UNKNOWN_INLINE, "= 1"})
+        counts = {LOAD_UNKNOWN_INLINE, "= 1"})
     @IR(applyIf = {"FlatArrayElementMaxSize", "!= -1"},
         failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE})
     public Object test80(Object[] array, int i) {
@@ -1956,7 +1956,7 @@ public class TestArrays {
     // Verify that casting an array element to a non-inline type type marks the array as not-null-free and not-flat
     @Test
     @IR(applyIf = {"FlatArrayElementMaxSize", "= -1"},
-        counts = {ALLOC_G, "= 1", LOAD_UNKNOWN_INLINE, "= 1"},
+        counts = {LOAD_UNKNOWN_INLINE, "= 1"},
         failOn = {ALLOCA_G, STORE_UNKNOWN_INLINE, INLINE_ARRAY_NULL_GUARD})
     @IR(applyIf = {"FlatArrayElementMaxSize", "!= -1"},
             failOn = {ALLOC_G, ALLOCA_G, LOAD_UNKNOWN_INLINE, STORE_UNKNOWN_INLINE, INLINE_ARRAY_NULL_GUARD})

@@ -650,7 +650,8 @@ void Type::Initialize_shared(Compile* current) {
   TypeAryPtr::LONGS   = TypeAryPtr::make(TypePtr::BotPTR, TypeAry::make(TypeLong::LONG     ,TypeInt::POS), ciTypeArrayKlass::make(T_LONG),   true,  Offset::bottom);
   TypeAryPtr::FLOATS  = TypeAryPtr::make(TypePtr::BotPTR, TypeAry::make(Type::FLOAT        ,TypeInt::POS), ciTypeArrayKlass::make(T_FLOAT),  true,  Offset::bottom);
   TypeAryPtr::DOUBLES = TypeAryPtr::make(TypePtr::BotPTR, TypeAry::make(Type::DOUBLE       ,TypeInt::POS), ciTypeArrayKlass::make(T_DOUBLE), true,  Offset::bottom);
-  TypeAryPtr::INLINES = TypeAryPtr::make(TypePtr::BotPTR, TypeAry::make(TypeInlineType::BOTTOM,TypeInt::POS), NULL, false,  Offset::bottom);
+  // TODO remove TypeInlineType::BOTTOM
+  TypeAryPtr::INLINES = TypeAryPtr::make(TypePtr::BotPTR, TypeAry::make(TypeInlineType::BOTTOM, TypeInt::POS, /* stable = */ false, /* flat = */ true), NULL, false, Offset::bottom);
 
   // Nobody should ask _array_body_type[T_NARROWOOP]. Use NULL as assert.
   TypeAryPtr::_array_body_type[T_NARROWOOP] = NULL;
@@ -2295,12 +2296,14 @@ inline const TypeInt* normalize_array_size(const TypeInt* size) {
 
 //------------------------------make-------------------------------------------
 const TypeAry* TypeAry::make(const Type* elem, const TypeInt* size, bool stable,
-                             bool not_flat, bool not_null_free) {
+                             bool flat, bool not_flat, bool not_null_free) {
+  // TODO enable
+  // assert(!flat || !not_flat, "Inconsistency");
   if (UseCompressedOops && elem->isa_oopptr()) {
     elem = elem->make_narrowoop();
   }
   size = normalize_array_size(size);
-  return (TypeAry*)(new TypeAry(elem, size, stable, not_flat, not_null_free))->hashcons();
+  return (TypeAry*)(new TypeAry(elem, size, stable, flat, not_flat, not_null_free))->hashcons();
 }
 
 //------------------------------meet-------------------------------------------
@@ -2320,9 +2323,20 @@ const Type *TypeAry::xmeet( const Type *t ) const {
 
   case Array: {                 // Meeting 2 arrays?
     const TypeAry *a = t->is_ary();
-    return TypeAry::make(_elem->meet_speculative(a->_elem),
+    const Type* elem = _elem->meet_speculative(a->_elem);
+    // TODO check this
+    bool flat = false;
+    if (elem == _elem) {
+      flat = _flat;
+    } else if (elem == a->_elem) {
+      flat = a->_flat;
+    } else {
+      flat = _flat && a->_flat;
+    }
+    return TypeAry::make(elem,
                          _size->xmeet(a->_size)->is_int(),
                          _stable && a->_stable,
+                         flat,
                          _not_flat && a->_not_flat,
                          _not_null_free && a->_not_null_free);
   }
@@ -2337,7 +2351,7 @@ const Type *TypeAry::xmeet( const Type *t ) const {
 const Type *TypeAry::xdual() const {
   const TypeInt* size_dual = _size->dual()->is_int();
   size_dual = normalize_array_size(size_dual);
-  return new TypeAry(_elem->dual(), size_dual, !_stable, !_not_flat, !_not_null_free);
+  return new TypeAry(_elem->dual(), size_dual, !_stable, _flat, !_not_flat, !_not_null_free);
 }
 
 //------------------------------eq---------------------------------------------
@@ -2347,6 +2361,7 @@ bool TypeAry::eq( const Type *t ) const {
   return _elem == a->_elem &&
     _stable == a->_stable &&
     _size == a->_size &&
+    _flat == a->_flat &&
     _not_flat == a->_not_flat &&
     _not_null_free == a->_not_null_free;
 
@@ -2362,14 +2377,14 @@ int TypeAry::hash(void) const {
  * Return same type without a speculative part in the element
  */
 const Type* TypeAry::remove_speculative() const {
-  return make(_elem->remove_speculative(), _size, _stable, _not_flat, _not_null_free);
+  return make(_elem->remove_speculative(), _size, _stable, _flat, _not_flat, _not_null_free);
 }
 
 /**
  * Return same type with cleaned up speculative part of element
  */
 const Type* TypeAry::cleanup_speculative() const {
-  return make(_elem->cleanup_speculative(), _size, _stable, _not_flat, _not_null_free);
+  return make(_elem->cleanup_speculative(), _size, _stable, _flat, _not_flat, _not_null_free);
 }
 
 /**
@@ -2404,6 +2419,7 @@ bool TypeAry::interface_vs_oop(const Type *t) const {
 void TypeAry::dump2( Dict &d, uint depth, outputStream *st ) const {
   if (_stable)  st->print("stable:");
   if (Verbose) {
+    if (_flat) st->print("flat:");
     if (_not_flat) st->print("not flat:");
     if (_not_null_free) st->print("not null free:");
   }
@@ -3583,12 +3599,13 @@ const TypeOopPtr* TypeOopPtr::make_from_klass_common(ciKlass *klass, bool klass_
       // Use exact type if element can be an inline type
       exact_etype = TypeOopPtr::make_from_klass_common(klass->as_array_klass()->element_klass(), /* klass_change= */ true, /* try_for_exact= */ true);
     }
+    bool flat = klass->is_flat_array_klass();
     bool not_null_free = !exact_etype->can_be_inline_type();
     bool not_flat = !UseFlatArray || !exact_etype->can_be_inline_type() || (exact_etype->is_inlinetypeptr() && !exact_etype->inline_klass()->flatten_array());
 
     // Even if MyValue is exact, [LMyValue is not exact due to [QMyValue <: [LMyValue.
     bool xk = etype->klass_is_exact() && (!etype->is_inlinetypeptr() || null_free);
-    const TypeAry* arr0 = TypeAry::make(etype, TypeInt::POS, false, not_flat, not_null_free);
+    const TypeAry* arr0 = TypeAry::make(etype, TypeInt::POS, false, flat, not_flat, not_null_free);
     // We used to pass NotNull in here, asserting that the sub-arrays
     // are all not-null.  This is not true in generally, as code can
     // slam NULLs down in the subarrays.
@@ -3598,7 +3615,7 @@ const TypeOopPtr* TypeOopPtr::make_from_klass_common(ciKlass *klass, bool klass_
     // Element is an typeArray
     const Type* etype = get_const_basic_type(klass->as_type_array_klass()->element_type());
     const TypeAry* arr0 = TypeAry::make(etype, TypeInt::POS,
-                                        /* stable= */ false, /* not_flat= */ true, /* not_null_free= */ true);
+                                        /* stable= */ false, /* flat = */ false, /* not_flat= */ true, /* not_null_free= */ true);
     // We used to pass NotNull in here, asserting that the array pointer
     // is not-null. That was not true in general.
     const TypeAryPtr* arr = TypeAryPtr::make(TypePtr::BotPTR, arr0, klass, true, Offset(0));
@@ -3634,7 +3651,7 @@ const TypeOopPtr* TypeOopPtr::make_from_constant(ciObject* o, bool require_const
       etype = etype->join_speculative(TypePtr::NOTNULL)->is_oopptr();
     }
     const TypeAry* arr0 = TypeAry::make(etype, TypeInt::make(o->as_array()->length()),
-                                        /* stable= */ false, /* not_flat= */ !flat, /* not_null_free= */ !null_free);
+                                        /* stable= */ false, /* flat = */ flat, /* not_flat= */ !flat, /* not_null_free= */ !null_free);
     // We used to pass NotNull in here, asserting that the sub-arrays
     // are all not-null.  This is not true in generally, as code can
     // slam NULLs down in the subarrays.
@@ -3647,7 +3664,7 @@ const TypeOopPtr* TypeOopPtr::make_from_constant(ciObject* o, bool require_const
     // Element is an typeArray
     const Type* etype = (Type*)get_const_basic_type(klass->as_type_array_klass()->element_type());
     const TypeAry* arr0 = TypeAry::make(etype, TypeInt::make(o->as_array()->length()),
-                                        /* stable= */ false, /* not_flat= */ true, /* not_null_free= */ true);
+                                        /* stable= */ false, /* flat = */ false, /* not_flat= */ true, /* not_null_free= */ true);
     // We used to pass NotNull in here, asserting that the array pointer
     // is not-null. That was not true in general.
     if (make_constant) {
@@ -4504,7 +4521,7 @@ const Type *TypeAryPtr::cast_to_exactness(bool klass_is_exact) const {
   const TypeAry* new_ary = _ary;
   if (klass() != NULL && klass()->is_obj_array_klass() && klass_is_exact) {
     // An object array can't be flat or null-free if the klass is exact
-    new_ary = TypeAry::make(elem(), size(), is_stable(), /* not_flat= */ true, /* not_null_free= */ true);
+    new_ary = TypeAry::make(elem(), size(), is_stable(), /* flat = */ false, /* not_flat= */ true, /* not_null_free= */ true);
   }
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact, _offset, _field_offset, _instance_id, _speculative, _inline_depth, _is_autobox_cache);
 }
@@ -4568,7 +4585,7 @@ const TypeAryPtr* TypeAryPtr::cast_to_size(const TypeInt* new_size) const {
   assert(new_size != NULL, "");
   new_size = narrow_size_type(new_size);
   if (new_size == size())  return this;
-  const TypeAry* new_ary = TypeAry::make(elem(), new_size, is_stable(), is_not_flat(), is_not_null_free());
+  const TypeAry* new_ary = TypeAry::make(elem(), new_size, is_stable(), is_flat(), is_not_flat(), is_not_null_free());
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact(), _offset, _field_offset, _instance_id, _speculative, _inline_depth, _is_autobox_cache);
 }
 
@@ -4577,7 +4594,7 @@ const TypeAryPtr* TypeAryPtr::cast_to_not_flat(bool not_flat) const {
   if (not_flat == is_not_flat()) {
     return this;
   }
-  const TypeAry* new_ary = TypeAry::make(elem(), size(), is_stable(), not_flat, is_not_null_free());
+  const TypeAry* new_ary = TypeAry::make(elem(), size(), is_stable(), is_flat(), not_flat, is_not_null_free());
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact(), _offset, _field_offset, _instance_id, _speculative, _inline_depth, _is_autobox_cache);
 }
 
@@ -4592,7 +4609,7 @@ const TypeAryPtr* TypeAryPtr::cast_to_not_null_free(bool not_null_free) const {
   if (not_null_free &&  elem()->make_ptr() != NULL && elem()->make_ptr()->is_inlinetypeptr() && elem()->make_ptr()->inline_klass()->is_null_free()) {
     not_flat = true;
   }
-  const TypeAry* new_ary = TypeAry::make(elem(), size(), is_stable(), not_flat, not_null_free);
+  const TypeAry* new_ary = TypeAry::make(elem(), size(), is_stable(), is_flat(), not_flat, not_null_free);
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact(), _offset, _field_offset, _instance_id, _speculative, _inline_depth, _is_autobox_cache);
 }
 
@@ -4627,7 +4644,7 @@ const TypeAryPtr* TypeAryPtr::cast_to_stable(bool stable, int stable_dimension) 
     elem = elem_ptr = elem_ptr->is_aryptr()->cast_to_stable(stable, stable_dimension - 1);
   }
 
-  const TypeAry* new_ary = TypeAry::make(elem, size(), stable, is_not_flat(), is_not_null_free());
+  const TypeAry* new_ary = TypeAry::make(elem, size(), stable, is_flat(), is_not_flat(), is_not_null_free());
 
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact(), _offset, _field_offset, _instance_id, _speculative, _inline_depth, _is_autobox_cache);
 }
@@ -4649,7 +4666,7 @@ const TypeAryPtr* TypeAryPtr::cast_to_autobox_cache() const {
   if (etype == NULL)  return this;
   // The pointers in the autobox arrays are always non-null.
   etype = etype->cast_to_ptr_type(TypePtr::NotNull)->is_oopptr();
-  const TypeAry* new_ary = TypeAry::make(etype, size(), is_stable(), is_not_flat(), is_not_null_free());
+  const TypeAry* new_ary = TypeAry::make(etype, size(), is_stable(), is_flat(), is_not_flat(), is_not_null_free());
   return make(ptr(), const_oop(), new_ary, klass(), klass_is_exact(), _offset, _field_offset, _instance_id, _speculative, _inline_depth, /*is_autobox_cache=*/true);
 }
 
@@ -4769,7 +4786,7 @@ const Type *TypeAryPtr::xmeet_helper(const Type *t) const {
         // Something like byte[int+] meets char[int+].
         // This must fall to bottom, not (int[-128..65535])[int+].
         instance_id = InstanceBot;
-        tary = TypeAry::make(Type::BOTTOM, tary->_size, tary->_stable, tary->_not_flat, tary->_not_null_free);
+        tary = TypeAry::make(Type::BOTTOM, tary->_size, tary->_stable, tary->_flat, tary->_not_flat, tary->_not_null_free);
       }
     } else // Non integral arrays.
       // Must fall to bottom if exact klasses in upper lattice
@@ -4783,21 +4800,18 @@ const Type *TypeAryPtr::xmeet_helper(const Type *t) const {
            (tap->_klass_is_exact && !tap->klass()->is_subtype_of(klass())) ||
            // 'this' is exact and super or unrelated:
            (this->_klass_is_exact && !klass()->is_subtype_of(tap->klass())))) {
-      if (above_centerline(ptr) || (tary->_elem->make_ptr() && above_centerline(tary->_elem->make_ptr()->_ptr)) ||
-          // TODO fix this
-          tary->_elem->isa_inlinetype()) {
-        tary = TypeAry::make(Type::BOTTOM, tary->_size, tary->_stable, tary->_not_flat, tary->_not_null_free);
+      if (above_centerline(ptr) || (tary->_elem->make_ptr() && above_centerline(tary->_elem->make_ptr()->_ptr))) {
+        tary = TypeAry::make(Type::BOTTOM, tary->_size, tary->_stable, tary->_flat, tary->_not_flat, tary->_not_null_free);
       }
       return make(NotNull, NULL, tary, lazy_klass, false, off, field_off, InstanceBot, speculative, depth);
-      // TODO use is_flat?
-    } else if (klass() != NULL && tap->klass() != NULL && klass()->is_flat_array_klass() != tap->klass()->is_flat_array_klass()) {
+    } else if (is_flat() != tap->is_flat()) {
       // Meeting flattened inline type array with non-flattened array. Adjust (field) offset accordingly.
-      // TODO fix this
-      if (tary->_elem->isa_inlinetype()) {
+      if ((is_flat() && tary->_elem == _ary->_elem) ||
+          (tap->is_flat() && tary->_elem == tap->_ary->_elem)) {
         // Result is flattened
         off = Offset(is_flat() ? offset() : tap->offset());
         field_off = is_flat() ? field_offset() : tap->field_offset();
-      } else if (tary->_elem->make_oopptr() != NULL && tary->_elem->make_oopptr()->isa_instptr() && below_centerline(ptr)) {
+      } else if (below_centerline(ptr)) {
         // Result is non-flattened
         off = Offset(flattened_offset()).meet(Offset(tap->flattened_offset()));
         field_off = Offset::bottom;
@@ -4919,7 +4933,8 @@ const Type *TypeAryPtr::xmeet_helper(const Type *t) const {
 //------------------------------xdual------------------------------------------
 // Dual: compute field-by-field dual
 const Type *TypeAryPtr::xdual() const {
-  return new TypeAryPtr(dual_ptr(), _const_oop, _ary->dual()->is_ary(), _klass, _klass_is_exact, dual_offset(), dual_field_offset(), dual_instance_id(), is_autobox_cache(), dual_speculative(), dual_inline_depth());
+  const TypeAry* ary = _ary->dual()->is_ary();
+  return new TypeAryPtr(dual_ptr(), _const_oop, ary, _klass, _klass_is_exact, dual_offset(), dual_field_offset(), dual_instance_id(), is_autobox_cache(), dual_speculative(), dual_inline_depth());
 }
 
 Type::Offset TypeAryPtr::meet_field_offset(const Type::Offset offset) const {
@@ -5513,16 +5528,15 @@ ciKlass* TypeAryPtr::compute_klass(DEBUG_ONLY(bool verify)) const {
   // Get element klass
   if (el->isa_instptr()) {
     // Compute object array klass from element klass
-    bool is_Q = el->is_inlinetypeptr() && el->isa_instptr()->ptr() != TypePtr::TopPTR && !el->isa_instptr()->maybe_null();
+    // TODO this is not correct, it could be a nullable, flattenable type
+    //bool is_Q = el->is_inlinetypeptr() && (el->isa_instptr()->ptr() == TypePtr::NotNull || _ary->_flat);
+    bool is_Q = el->is_inlinetypeptr() && ((el->isa_instptr()->ptr() != TypePtr::TopPTR && !el->isa_instptr()->maybe_null()) || _ary->_flat);
     // TODO
-    assert(!is_Q || !el->is_inlinetypeptr() || el->inline_klass()->is_null_free(), "sanity");
+  //  assert(!is_Q || !el->is_inlinetypeptr() || el->inline_klass()->is_null_free(), "sanity");
     k_ary = ciArrayKlass::make(el->is_oopptr()->klass(), is_Q);
   } else if (el->isa_inlinetype()) {
-    // If element type is TypeInlineType::BOTTOM, inline_klass() will be null.
-    if (el->inline_klass() != NULL) {
-      // TODO is_Q
-      k_ary = ciArrayKlass::make(el->inline_klass(), el->inline_klass()->is_null_free());
-    }
+    // Only used for TypeAryPtr::INLINES
+    assert(el == TypeInlineType::BOTTOM, "Unexpected element type");
   } else if ((tary = el->isa_aryptr()) != NULL) {
     // Compute array klass from element klass
     ciKlass* k_elem = tary->klass();

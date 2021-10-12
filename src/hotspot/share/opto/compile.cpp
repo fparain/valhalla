@@ -1354,7 +1354,7 @@ const TypePtr *Compile::flatten_alias_type( const TypePtr *tj ) const {
     }
     // Arrays of fixed size alias with arrays of unknown size.
     if (ta->size() != TypeInt::POS) {
-      const TypeAry *tary = TypeAry::make(ta->elem(), TypeInt::POS);
+      const TypeAry *tary = TypeAry::make(ta->elem(), TypeInt::POS, false, ta->is_flat());
       tj = ta = TypeAryPtr::make(ptr,ta->const_oop(),tary,ta->klass(),false,Type::Offset(offset), ta->field_offset());
     }
     // Arrays of known objects become arrays of unknown objects.
@@ -1368,7 +1368,7 @@ const TypePtr *Compile::flatten_alias_type( const TypePtr *tj ) const {
     }
     // Initially all flattened array accesses share a single slice
     if (ta->is_flat() && ta->elem() != TypeInlineType::BOTTOM && _flattened_accesses_share_alias) {
-      const TypeAry* tary = TypeAry::make(TypeInlineType::BOTTOM, ta->size());
+      const TypeAry* tary = TypeAry::make(TypeInlineType::BOTTOM, ta->size(), /* stable = */ false, /* flat = */ true);
       tj = ta = TypeAryPtr::make(ptr, ta->const_oop(), tary, NULL, false, Type::Offset(offset), Type::Offset(Type::OffsetBot));
     }
     // Arrays of bytes and of booleans both use 'bastore' and 'baload' so

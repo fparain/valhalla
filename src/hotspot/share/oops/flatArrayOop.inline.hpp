@@ -57,13 +57,6 @@ inline oop flatArrayOopDesc::value_alloc_copy_from_index(flatArrayHandle vah, in
   }
 }
 
-inline void flatArrayOopDesc::value_copy_from_index(int index, oop dst) const {
-  FlatArrayKlass* vaklass = FlatArrayKlass::cast(klass());
-  InlineKlass* vklass = vaklass->element_klass();
-  void* src = value_at_addr(index, vaklass->layout_helper());
-  return vklass->inline_copy_payload_to_new_oop(src, dst);
-}
-
 inline void flatArrayOopDesc::value_copy_to_index(oop src, int index) const {
   FlatArrayKlass* vaklass = FlatArrayKlass::cast(klass());
   InlineKlass* vklass = vaklass->element_klass();
@@ -73,7 +66,5 @@ inline void flatArrayOopDesc::value_copy_to_index(oop src, int index) const {
   void* dst = value_at_addr(index, vaklass->layout_helper());
   vklass->inline_copy_oop_to_payload(src, dst);
 }
-
-
 
 #endif // SHARE_VM_OOPS_FLATARRAYOOP_INLINE_HPP

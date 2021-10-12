@@ -130,71 +130,38 @@ void Parse::array_load(BasicType bt) {
         ideal.sync_kit(this);
       } else {
         // Element type is unknown, emit runtime call
-        Node* kls = load_object_klass(ary);
-        Node* k_adr = basic_plus_adr(kls, in_bytes(ArrayKlass::element_klass_offset()));
-        Node* elem_klass = _gvn.transform(LoadKlassNode::make(_gvn, NULL, immutable_memory(), k_adr, TypeInstPtr::KLASS));
-        Node* obj_size  = NULL;
         kill_dead_locals();
+        // TODO check if still needed
         // Re-execute flattened array load if buffering triggers deoptimization
         PreserveReexecuteState preexecs(this);
         jvms()->set_bci(_bci);
         jvms()->set_should_reexecute(true);
         inc_sp(2);
-        Node* alloc_obj = new_instance(elem_klass, NULL, &obj_size, /*deoptimize_on_exception=*/true);
-
-        AllocateNode* alloc = AllocateNode::Ideal_allocation(alloc_obj, &_gvn);
-        assert(alloc->maybe_set_complete(&_gvn), "");
-        alloc->initialization()->set_complete_with_arraycopy();
 
         // This membar keeps this access to an unknown flattened array
         // correctly ordered with other unknown and known flattened
         // array accesses.
         insert_mem_bar_volatile(Op_MemBarCPUOrder, C->get_alias_index(TypeAryPtr::INLINES));
 
-        BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
-        // Unknown inline type might contain reference fields
-        if (false && !bs->array_copy_requires_gc_barriers(false, T_OBJECT, false, false, BarrierSetC2::Parsing)) {
-          // FIXME 8230656 also merge changes from 8238759 in
-          int base_off = sizeof(instanceOopDesc);
-          Node* dst_base = basic_plus_adr(alloc_obj, base_off);
-          Node* countx = obj_size;
-          countx = _gvn.transform(new SubXNode(countx, MakeConX(base_off)));
-          countx = _gvn.transform(new URShiftXNode(countx, intcon(LogBytesPerLong)));
+        Node* call = make_runtime_call(RC_NO_LEAF | RC_NO_IO,
+                                       OptoRuntime::load_unknown_inline_type(),
+                                       OptoRuntime::load_unknown_inline_Java(),
+                                       NULL, TypeRawPtr::BOTTOM,
+                                       ary, idx);
+        // TODO needed?
+        //make_slow_call_ex(call, env()->Throwable_klass(), false, true);
 
-          assert(Klass::_lh_log2_element_size_shift == 0, "use shift in place");
-          Node* lhp = basic_plus_adr(kls, in_bytes(Klass::layout_helper_offset()));
-          Node* elem_shift = make_load(NULL, lhp, TypeInt::INT, T_INT, MemNode::unordered);
-          uint header = arrayOopDesc::base_offset_in_bytes(T_INLINE_TYPE);
-          Node* base  = basic_plus_adr(ary, header);
-          idx = Compile::conv_I2X_index(&_gvn, idx, TypeInt::POS, control());
-          Node* scale = _gvn.transform(new LShiftXNode(idx, elem_shift));
-          Node* adr = basic_plus_adr(ary, base, scale);
-
-          access_clone(adr, dst_base, countx, false);
-        } else {
-          ideal.sync_kit(this);
-          // TODO array element might be null! Move all the logic into the runtime
-          ideal.make_leaf_call(OptoRuntime::load_unknown_inline_type(),
-                               CAST_FROM_FN_PTR(address, OptoRuntime::load_unknown_inline),
-                               "load_unknown_inline",
-                               ary, idx, alloc_obj);
-          sync_kit(ideal);
-        }
-
-        // This makes sure no other thread sees a partially initialized buffered inline type
-        insert_mem_bar_volatile(Op_MemBarStoreStore, Compile::AliasIdxRaw, alloc->proj_out_or_null(AllocateNode::RawAddress));
+        Node* alloc_obj = _gvn.transform(new ProjNode(call, TypeFunc::Parms));
 
         // Same as MemBarCPUOrder above: keep this unknown flattened
         // array access correctly ordered with other flattened array
-        // access
+        // accesses
         insert_mem_bar_volatile(Op_MemBarCPUOrder, C->get_alias_index(TypeAryPtr::INLINES));
 
-        // Prevent any use of the newly allocated inline type before it is fully initialized
-        alloc_obj = new CastPPNode(alloc_obj, _gvn.type(alloc_obj), ConstraintCastNode::StrongDependency);
-        alloc_obj->set_req(0, control());
-        alloc_obj = _gvn.transform(alloc_obj);
-
         const Type* unknown_value = elemptr->is_instptr()->cast_to_flatten_array();
+        // TODO we speculate that the flat array element is non-null here to enable optimizations like TestLWorld::92/94
+        // TODO do we risk a deopt storm if null is common?
+        unknown_value = unknown_value->join_speculative(elemptr->is_instptr()->cast_to_ptr_type(TypePtr::NotNull));
         alloc_obj = _gvn.transform(new CheckCastPPNode(control(), alloc_obj, unknown_value));
 
         ideal.sync_kit(this);
@@ -2124,10 +2091,18 @@ void Parse::do_acmp(BoolTest::mask btest, Node* left, Node* right) {
 
   // Allocate inline type operands and re-execute on deoptimization
   if (left->is_InlineType()) {
-    PreserveReexecuteState preexecs(this);
-    inc_sp(2);
-    jvms()->set_should_reexecute(true);
-    left = left->as_InlineType()->buffer(this)->get_oop();
+    if (_gvn.type(right)->is_zero_type()) {
+      // Null checking a scalarized but nullable inline type. Check the is_init
+      // input instead of the oop input to avoid keeping buffer allocations alive.
+      Node* cmp = CmpI(left->as_InlineType()->get_is_init(), intcon(0));
+      do_if(btest, cmp);
+      return;
+    } else {
+      PreserveReexecuteState preexecs(this);
+      inc_sp(2);
+      jvms()->set_should_reexecute(true);
+      left = left->as_InlineType()->buffer(this)->get_oop();
+    }
   }
   if (right->is_InlineType()) {
     PreserveReexecuteState preexecs(this);
