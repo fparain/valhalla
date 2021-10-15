@@ -2152,6 +2152,107 @@ void LIRGenerator::do_LoadField(LoadField* x) {
   }
 }
 
+void LIRGenerator::copy_field_content(ciField* field, LIRItem src, int src_offset, LIRItem dst, int dst_offset, Instruction* x) {
+  if (!field->is_flattened()) {
+    BasicType t = field->type()->basic_type();
+    switch (t) {
+      case T_BYTE:
+      case T_BOOLEAN:
+      case T_SHORT:
+      case T_CHAR:
+        t = T_INT;
+        break;
+      default:
+        break;
+    }
+    LIR_Opr reg = new_register(t);
+    DecoratorSet decorators = IN_HEAP;
+    if (field->is_volatile()) {
+      decorators |= MO_SEQ_CST;
+    }
+    BasicType field_type = field->type()->basic_type();
+    CodeEmitInfo* info = state_for(x, x->state_before());
+    access_load_at(decorators, field_type,
+                    src, LIR_OprFact::intConst(src_offset), reg,
+                    NULL, info);
+    decorators = IN_HEAP;
+    access_store_at(decorators, field_type, dst, LIR_OprFact::intConst(dst_offset),
+                        reg, NULL, info);
+  } else {
+    ciInlineKlass* inline_klass = field->type()->as_inline_klass();
+    tty->print_cr("Inline klass %p", inline_klass);
+    for (int i = 0; i < inline_klass->nof_nonstatic_fields(); i++) {
+      DecoratorSet decorators = IN_HEAP;
+      ciField* inner_field = inline_klass->nonstatic_field_at(i);
+      int offset1 = src_offset + inner_field->offset() - inline_klass->first_field_offset();
+      int offset2 = dst_offset + inner_field->offset() - inline_klass->first_field_offset();
+      if (inner_field->is_flattened()) {
+        // call copy_field_content recursively
+        copy_field_content(inner_field, src, offset1, dst, offset2, x);
+      } else {
+        BasicType field_type = inner_field->type()->basic_type();
+        BasicType t = field_type;
+        switch (t) {
+          case T_BYTE:
+          case T_BOOLEAN:
+          case T_SHORT:
+          case T_CHAR:
+            t = T_INT;
+            break;
+          default:
+            break;
+        }
+        LIR_Opr reg = new_register(t);
+        if (inner_field->is_volatile()) {                 // Decorators are not enough for volatile flat field
+          decorators |= MO_SEQ_CST;
+        }
+        CodeEmitInfo* info = state_for(x, x->state_before());
+        access_load_at(decorators, field_type,
+                      src, LIR_OprFact::intConst(offset1), reg,
+                       NULL, info ? new CodeEmitInfo(info) : NULL);
+        info = state_for(x, x->state_before());
+        access_store_at(decorators, field_type, dst, LIR_OprFact::intConst(offset2),
+                        reg, NULL, info ? new CodeEmitInfo(info) : NULL);
+      }
+    }
+  }
+}
+
+void LIRGenerator::do_LoadFlatField(LoadFlatField* x) {
+  assert(x->field()->is_flattened(), "Only flattened fields should be handle here");
+  assert(!x->needs_patching(), "Doesn't make sense for flat fields");
+  assert(!x->is_static(), "static fields are never flattened");
+  bool is_volatile = x->field()->is_volatile();
+  BasicType field_type = x->field_type();
+
+  ciField* field = x->field();
+  ciInlineKlass* inline_klass = field->type()->as_inline_klass();
+
+  // assert(!x->explicit_null_check(), "No regular null check");
+  // missing null check here?
+
+  LIRItem object(x->obj(), this);
+  object.load_item();
+
+  LIR_Opr result = rlock_result(x, field_type);
+  if (inline_klass->is_empty()) {
+    Constant* default_value = new Constant(new InstanceConstant(inline_klass->default_instance()));
+    if (default_value->is_pinned()) {
+      __ move(LIR_OprFact::value_type(default_value->type()), result);
+    } else {
+      __ move(load_constant(default_value), result);
+    }
+  } else {
+    // null free flattened valued => buffer a copy in the heap
+    // regarding x->state_before(): is a deopt possible while reading a flat field?
+    LIR_Opr buf = new_buffered_value(inline_klass, x->type(), state_for(x, x->state_before()));
+    __ move(buf, result);
+
+    LIRItem buf_value(x, this);
+    copy_field_content(field, object, field->offset(), buf_value, inline_klass->first_field_offset(), x);
+  }
+}
+
 // int/long jdk.internal.util.Preconditions.checkIndex
 void LIRGenerator::do_PreconditionsCheckIndex(Intrinsic* x, BasicType type) {
   assert(x->number_of_arguments() == 3, "wrong type");

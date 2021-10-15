@@ -378,12 +378,15 @@ class LIRGenerator: public InstructionVisitor, public BlockClosure {
   void monitor_exit  (LIR_Opr object, LIR_Opr lock, LIR_Opr hdr, LIR_Opr scratch, int monitor_no);
 
   void new_instance(LIR_Opr dst, ciInstanceKlass* klass, bool is_unresolved, bool allow_inline, LIR_Opr scratch1, LIR_Opr scratch2, LIR_Opr scratch3, LIR_Opr scratch4, LIR_Opr klass_reg, CodeEmitInfo* info);
+  void copy_field_content(ciField* field, LIRItem src, int src_offset,LIRItem dst, int dst_offset, Instruction* x);
 
   // machine dependent
   void cmp_mem_int(LIR_Condition condition, LIR_Opr base, int disp, int c, CodeEmitInfo* info);
   void cmp_reg_mem(LIR_Condition condition, LIR_Opr reg, LIR_Opr base, int disp, BasicType type, CodeEmitInfo* info);
 
   void arraycopy_helper(Intrinsic* x, int* flags, ciArrayKlass** expected_type);
+
+  LIR_Opr new_buffered_value(ciInlineKlass* klass, ValueType* type, CodeEmitInfo* info);
 
   // returns a LIR_Address to address an array location.  May also
   // emit some code as part of address calculation.  If
@@ -565,6 +568,7 @@ class LIRGenerator: public InstructionVisitor, public BlockClosure {
   virtual void do_Local          (Local*           x);
   virtual void do_Constant       (Constant*        x);
   virtual void do_LoadField      (LoadField*       x);
+  virtual void do_LoadFlatField  (LoadFlatField*   x);
   virtual void do_StoreField     (StoreField*      x);
   virtual void do_ArrayLength    (ArrayLength*     x);
   virtual void do_LoadIndexed    (LoadIndexed*     x);

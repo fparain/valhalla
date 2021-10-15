@@ -175,6 +175,7 @@ class ValueNumberingVisitor: public InstructionVisitor {
       kill_memory();
     }
   }
+  void do_LoadFlatField  (LoadFlatField*   x) { /* ??? */ }
   void do_ArrayLength    (ArrayLength*     x) { /* nothing to do */ }
   void do_LoadIndexed    (LoadIndexed*     x) { /* nothing to do */ }
   void do_NegateOp       (NegateOp*        x) { /* nothing to do */ }

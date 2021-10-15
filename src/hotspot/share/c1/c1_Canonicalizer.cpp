@@ -195,6 +195,7 @@ void Canonicalizer::do_Phi            (Phi*             x) {}
 void Canonicalizer::do_Constant       (Constant*        x) {}
 void Canonicalizer::do_Local          (Local*           x) {}
 void Canonicalizer::do_LoadField      (LoadField*       x) {}
+void Canonicalizer::do_LoadFlatField  (LoadFlatField*   x) {}
 
 // checks if v is in the block that is currently processed by
 // GraphBuilder. This is the only block that has not BlockEnd yet.

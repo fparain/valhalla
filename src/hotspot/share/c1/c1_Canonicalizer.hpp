@@ -59,6 +59,7 @@ class Canonicalizer: InstructionVisitor {
   virtual void do_Constant       (Constant*        x);
   virtual void do_Local          (Local*           x);
   virtual void do_LoadField      (LoadField*       x);
+  virtual void do_LoadFlatField(LoadFlatField* x);
   virtual void do_StoreField     (StoreField*      x);
   virtual void do_ArrayLength    (ArrayLength*     x);
   virtual void do_LoadIndexed    (LoadIndexed*     x);

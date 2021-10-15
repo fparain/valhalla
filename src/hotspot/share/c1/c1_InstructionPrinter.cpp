@@ -364,6 +364,11 @@ void InstructionPrinter::do_LoadField(LoadField* x) {
   output()->print(" %s", x->field()->name()->as_utf8());
 }
 
+void InstructionPrinter::do_LoadFlatField(LoadFlatField* x) {
+  print_field(x);
+  output()->print(" (%c)", type2char(x->field()->type()->basic_type()));
+  output()->print(" %s", x->field()->name()->as_utf8());
+}
 
 void InstructionPrinter::do_StoreField(StoreField* x) {
   print_field(x);

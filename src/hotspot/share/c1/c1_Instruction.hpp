@@ -51,6 +51,7 @@ class   Local;
 class   Constant;
 class   AccessField;
 class     LoadField;
+class     LoadFlatField;
 class     StoreField;
 class   AccessArray;
 class     ArrayLength;
@@ -160,6 +161,7 @@ class InstructionVisitor: public StackObj {
   virtual void do_Local          (Local*           x) = 0;
   virtual void do_Constant       (Constant*        x) = 0;
   virtual void do_LoadField      (LoadField*       x) = 0;
+  virtual void do_LoadFlatField(LoadFlatField* x) = 0;
   virtual void do_StoreField     (StoreField*      x) = 0;
   virtual void do_ArrayLength    (ArrayLength*     x) = 0;
   virtual void do_LoadIndexed    (LoadIndexed*     x) = 0;
@@ -851,8 +853,7 @@ LEAF(LoadField, AccessField)
  public:
   // creation
   LoadField(Value obj, int offset, ciField* field, bool is_static,
-            ValueStack* state_before, bool needs_patching,
-            ciInlineKlass* inline_klass = NULL, Value default_value = NULL )
+            ValueStack* state_before, bool needs_patching)
   : AccessField(obj, offset, field, is_static, state_before, needs_patching)
   {
     set_null_free(field->is_null_free());
@@ -864,6 +865,18 @@ LEAF(LoadField, AccessField)
   HASHING3(LoadField, !needs_patching() && !field()->is_volatile(), obj()->subst(), offset(), declared_type())
 };
 
+LEAF(LoadFlatField, AccessField)
+ public:
+  LoadFlatField(Value obj, int offset, ciField* field, bool is_static,
+            ValueStack* state_before, bool needs_patching)
+  : AccessField(obj, offset, field, is_static, state_before, needs_patching)
+  {
+    set_null_free(field->is_null_free());
+  }
+
+  // generic; cannot be eliminated if needs patching or if volatile.
+  HASHING3(LoadField, !needs_patching() && !field()->is_volatile(), obj()->subst(), offset(), declared_type())
+};
 
 LEAF(StoreField, AccessField)
  private:

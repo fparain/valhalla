@@ -670,6 +670,17 @@ class MemoryBuffer: public CompilationResourceObj {
     }
   }
 
+  // Record this newly allocated object
+  void new_instance(LoadFlatField* object) {
+    int index = _newobjects.length();
+    _newobjects.append(object);
+    if (_fields.at_grow(index, NULL) == NULL) {
+      _fields.at_put(index, new FieldBuffer());
+    } else {
+      _fields.at(index)->kill();
+    }
+  }
+
   void store_value(Value value) {
     int index = _newobjects.find(value);
     if (index != -1) {
@@ -1036,7 +1047,7 @@ void GraphBuilder::load_indexed(BasicType type) {
     ciBytecodeStream s(method());
     s.force_bci(bci());
     s.next();
-    if (s.cur_bc() == Bytecodes::_getfield) {
+    if (s.cur_bc() == Bytecodes::_getfield && elem_klass->is_null_free()) {
       bool will_link;
       ciField* next_field = s.get_field(will_link);
       bool next_needs_patching = !next_field->holder()->is_loaded() ||
@@ -1958,13 +1969,13 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
           } else {
             push(type, append(load));
           }
-        } else {
+        } else {   // field is flattened
           // Look at the next bytecode to check if we can delay the field access
           bool can_delay_access = false;
           ciBytecodeStream s(method());
           s.force_bci(bci());
           s.next();
-          if (s.cur_bc() == Bytecodes::_getfield && !needs_patching) {
+          if (s.cur_bc() == Bytecodes::_getfield && !needs_patching && field->is_null_free()) {
             ciField* next_field = s.get_field(will_link);
             bool next_needs_patching = !next_field->holder()->is_loaded() ||
                                        !next_field->will_link(method(), Bytecodes::_getfield) ||
@@ -1982,6 +1993,9 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
               set_pending_field_access(dfa);
             }
           } else {
+            if (!has_pending_field_access() && !has_pending_load_indexed()) {
+              null_check(obj);
+            }
             ciInlineKlass* inline_klass = field->type()->as_inline_klass();
             scope()->set_wrote_final();
             scope()->set_wrote_fields();
@@ -2003,19 +2017,19 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
               append(pending_load_indexed()->load_instr());
               set_pending_load_indexed(NULL);
               need_membar = true;
+            } else if (has_pending_field_access()) {
+              LoadFlatField* bv = new LoadFlatField(pending_field_access()->obj(),
+                                                    pending_field_access()->offset() + field->offset() - field->holder()->as_inline_klass()->first_field_offset(),
+                                                    field, false, state_before, needs_patching);
+              _memory->new_instance(bv);
+              apush(append(bv));
+              set_pending_field_access(NULL);
+              need_membar = true;
             } else {
-              NewInlineTypeInstance* new_instance = new NewInlineTypeInstance(inline_klass, state_before);
-              _memory->new_instance(new_instance);
-              apush(append_split(new_instance));
               assert(!needs_patching, "Can't patch flattened inline type field access");
-              if (has_pending_field_access()) {
-                copy_inline_content(inline_klass, pending_field_access()->obj(),
-                                    pending_field_access()->offset() + field->offset() - field->holder()->as_inline_klass()->first_field_offset(),
-                                    new_instance, inline_klass->first_field_offset(), state_before);
-                set_pending_field_access(NULL);
-              } else {
-                copy_inline_content(inline_klass, obj, field->offset(), new_instance, inline_klass->first_field_offset(), state_before);
-              }
+              LoadFlatField* bv = new LoadFlatField(obj, field->offset(), field, false, state_before, needs_patching);
+              _memory->new_instance(bv);
+              apush(append(bv));
               need_membar = true;
             }
             if (need_membar) {

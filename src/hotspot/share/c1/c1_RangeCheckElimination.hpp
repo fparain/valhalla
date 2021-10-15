@@ -133,6 +133,7 @@ public:
     void do_Intrinsic      (Intrinsic*       x) { /* nothing to do */ };
     void do_Local          (Local*           x) { /* nothing to do */ };
     void do_LoadField      (LoadField*       x) { /* nothing to do */ };
+    void do_LoadFlatField  (LoadFlatField*   x) { /* nothing to do */ };
     void do_ArrayLength    (ArrayLength*     x) { /* nothing to do */ };
     void do_LoadIndexed    (LoadIndexed*     x) { /* nothing to do */ };
     void do_NegateOp       (NegateOp*        x) { /* nothing to do */ };

@@ -1310,6 +1310,18 @@ void LIRGenerator::do_NewInlineTypeInstance(NewInlineTypeInstance* x) {
   __ move(reg, result);
 }
 
+LIR_Opr LIRGenerator::new_buffered_value(ciInlineKlass* klass, ValueType* type, CodeEmitInfo* info) {
+  LIR_Opr reg = result_register_for(type);
+  new_instance(reg, klass, false,
+               /* allow_inline */ true,
+               FrameMap::rcx_oop_opr,
+               FrameMap::rdi_oop_opr,
+               FrameMap::rsi_oop_opr,
+               LIR_OprFact::illegalOpr,
+               FrameMap::rdx_metadata_opr, info);
+  return reg;
+}
+
 void LIRGenerator::do_NewTypeArray(NewTypeArray* x) {
   CodeEmitInfo* info = state_for(x, x->state());
 

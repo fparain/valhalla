@@ -498,6 +498,7 @@ public:
   void do_Local          (Local*           x);
   void do_Constant       (Constant*        x);
   void do_LoadField      (LoadField*       x);
+  void do_LoadFlatField  (LoadFlatField*   x);
   void do_StoreField     (StoreField*      x);
   void do_ArrayLength    (ArrayLength*     x);
   void do_LoadIndexed    (LoadIndexed*     x);
@@ -686,6 +687,7 @@ void NullCheckVisitor::do_Phi            (Phi*             x) { nce()->handle_Ph
 void NullCheckVisitor::do_Local          (Local*           x) {}
 void NullCheckVisitor::do_Constant       (Constant*        x) { /* FIXME: handle object constants */ }
 void NullCheckVisitor::do_LoadField      (LoadField*       x) { nce()->handle_AccessField(x); }
+void NullCheckVisitor::do_LoadFlatField  (LoadFlatField*   x) { nce()->handle_AccessField(x); }
 void NullCheckVisitor::do_StoreField     (StoreField*      x) { nce()->handle_AccessField(x); }
 void NullCheckVisitor::do_ArrayLength    (ArrayLength*     x) { nce()->handle_ArrayLength(x); }
 void NullCheckVisitor::do_LoadIndexed    (LoadIndexed*     x) { nce()->handle_LoadIndexed(x); }
