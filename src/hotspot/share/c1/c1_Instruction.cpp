@@ -234,7 +234,7 @@ ciType* Constant::exact_type() const {
   return NULL;
 }
 
-ciType* LoadIndexed::exact_type() const {
+ciType* ReadAccessIndexed::exact_type() const {
   ciType* array_type = array()->exact_type();
   if (subelt_field() == NULL && array_type != NULL) {
     assert(array_type->is_array_klass(), "what else?");
@@ -250,36 +250,7 @@ ciType* LoadIndexed::exact_type() const {
   return Instruction::exact_type();
 }
 
-ciType* LoadIndexed::declared_type() const {
-  if (subelt_field() != NULL) {
-    return subelt_field()->type();
-  }
-  ciType* array_type = array()->declared_type();
-  if (array_type == NULL || !array_type->is_loaded()) {
-    return NULL;
-  }
-  assert(array_type->is_array_klass(), "what else?");
-  ciArrayKlass* ak = (ciArrayKlass*)array_type;
-  return ak->element_type();
-}
-
-ciType* LoadFlatIndexed::exact_type() const {
-  ciType* array_type = array()->exact_type();
-  if (subelt_field() == NULL && array_type != NULL) {
-    assert(array_type->is_array_klass(), "what else?");
-    ciArrayKlass* ak = (ciArrayKlass*)array_type;
-
-    if (ak->element_type()->is_instance_klass()) {
-      ciInstanceKlass* ik = (ciInstanceKlass*)ak->element_type();
-      if (ik->is_loaded() && ik->is_final()) {
-        return ik;
-      }
-    }
-  }
-  return Instruction::exact_type();
-}
-
-ciType* LoadFlatIndexed::declared_type() const {
+ciType* ReadAccessIndexed::declared_type() const {
   if (subelt_field() != NULL) {
     return subelt_field()->type();
   }

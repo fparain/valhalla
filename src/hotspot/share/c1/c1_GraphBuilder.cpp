@@ -2018,6 +2018,8 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
               assert(!needs_patching, "Can't patch delayed field access");
               DelayedLoadIndexed* dli = pending_load_indexed();
               LoadFlatIndexed* lfi = new LoadFlatIndexed(dli->array(), dli->index(), dli->length(), dli->elt_type(), dli->state_before());
+              assert(lfi->as_LoadFlatIndexed() != NULL, "Must be");
+              assert(lfi->as_LoadIndexed() == NULL, "Hope would be");
               lfi->select_subelement(field, offset - field->holder()->as_inline_klass()->first_field_offset());
               _memory->new_instance(lfi);
               apush(append(lfi));

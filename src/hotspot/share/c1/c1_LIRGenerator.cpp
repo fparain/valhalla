@@ -2509,19 +2509,6 @@ void LIRGenerator::do_LoadFlatIndexed(LoadFlatIndexed* x) {
     }
   }
 
-  ciMethodData* md = NULL;
-  ciArrayLoadStoreData* load_store = NULL;
-  if (x->should_profile()) {
-    if (x->array()->is_loaded_flattened_array()) {
-      // No need to profile a load from a flattened array of known type. This can happen if
-      // the type only became known after optimizations (for example, after the PhiSimplifier).
-      x->set_should_profile(false);
-    } else {
-      profile_array_type(x, md, load_store);
-    }
-  }
-
-  Value element;
   assert(x->array()->is_loaded_flattened_array(), "must be");
   ciInlineKlass* inline_klass = NULL;
   if (x->subelt_field() != NULL) {
@@ -2536,12 +2523,7 @@ void LIRGenerator::do_LoadFlatIndexed(LoadFlatIndexed* x) {
 
   LIRItem buf_value(x, this);
 
-  tty->print_cr("access_flattened_array: field = %p, offset = %d", x->subelt_field(), x->subelt_offset());
   access_flattened_array(true, array, index, buf_value, x->subelt_field(), x->subelt_offset());
-
-  if (x->should_profile()) {
-    profile_element_type(element, md, load_store);
-  }
 }
 
 void LIRGenerator::do_Deoptimize(Deoptimize* x) {

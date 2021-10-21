@@ -56,8 +56,9 @@ class     StoreField;
 class   AccessArray;
 class     ArrayLength;
 class     AccessIndexed;
-class       LoadIndexed;
-class       LoadFlatIndexed;
+class       ReadAccessIndexed;
+class         LoadIndexed;
+class         LoadFlatIndexed;
 class       StoreIndexed;
 class   NegateOp;
 class   Op2;
@@ -1011,17 +1012,17 @@ BASE(AccessIndexed, AccessArray)
   virtual void input_values_do(ValueVisitor* f)   { AccessArray::input_values_do(f); f->visit(&_index); if (_length != NULL) f->visit(&_length); }
 };
 
-LEAF(LoadIndexed, AccessIndexed)
- private:
+BASE(ReadAccessIndexed, AccessIndexed)
+private:
   NullCheck*  _explicit_null_check;              // For explicit null check elimination
   ciField*    _subelt_field;                     // optional, used when accessing a sub-element
   int         _subelt_offset;                    // optional, used when accessing a sub-element
 
  public:
   // creation
-  LoadIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before, bool mismatched = false)
+  ReadAccessIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before, bool mismatched = false)
   : AccessIndexed(array, index, length, elt_type, state_before, mismatched)
-  , _explicit_null_check(NULL), _subelt_field(NULL), _subelt_offset(-1) {}
+  , _explicit_null_check(NULL), _subelt_field(NULL), _subelt_offset(0) {}
 
   // accessors
   NullCheck* explicit_null_check() const         { return _explicit_null_check; }
@@ -1040,36 +1041,22 @@ LEAF(LoadIndexed, AccessIndexed)
     _subelt_offset = offset;
     set_type(as_ValueType(field->type()->basic_type()));
   }
+};
+
+LEAF(LoadIndexed, ReadAccessIndexed)
+ public:
+  // creation
+  LoadIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before, bool mismatched = false)
+  : ReadAccessIndexed(array, index, length, elt_type, state_before, mismatched) {}
 
   // generic
   HASHING5(LoadIndexed, !should_profile(), type()->tag(), array()->subst(), index()->subst(), subelt_field(), subelt_offset())
 };
 
-LEAF(LoadFlatIndexed, AccessIndexed)
-private:
-  NullCheck*  _explicit_null_check;              // For explicit null check elimination
-  ciField*    _subelt_field;                     // optional, used when accessing a sub-element
-  int         _subelt_offset;                    // optional, used when accessing a sub-element
-
+LEAF(LoadFlatIndexed, ReadAccessIndexed)
  public:
   LoadFlatIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before)
-  : AccessIndexed(array, index, length, elt_type, state_before, false)
-  , _explicit_null_check(NULL), _subelt_field(NULL), _subelt_offset(0) {}
-
-  // accessors
-  NullCheck* explicit_null_check() const         { return _explicit_null_check; }
-  ciField* subelt_field() const                  { return _subelt_field; }
-  int subelt_offset() const                      { return _subelt_offset; }
-  ciType* exact_type() const;
-  ciType* declared_type() const;
-
-  // setters
-  void set_explicit_null_check(NullCheck* check) { _explicit_null_check = check; }
-  void select_subelement(ciField* field, int offset) {
-    _subelt_field = field;
-    _subelt_offset = offset;
-    set_type(as_ValueType(field->type()->basic_type()));
-  }
+  : ReadAccessIndexed(array, index, length, elt_type, state_before, false) {}
 
   // generic
   HASHING5(LoadFlatIndexed, !should_profile(), type()->tag(), array()->subst(), index()->subst(), subelt_field(), subelt_offset())
