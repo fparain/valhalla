@@ -2180,7 +2180,6 @@ void LIRGenerator::copy_field_content(ciField* field, LIRItem src, int src_offse
                         reg, NULL, info);
   } else {
     ciInlineKlass* inline_klass = field->type()->as_inline_klass();
-    tty->print_cr("Inline klass %p", inline_klass);
     for (int i = 0; i < inline_klass->nof_nonstatic_fields(); i++) {
       DecoratorSet decorators = IN_HEAP;
       ciField* inner_field = inline_klass->nonstatic_field_at(i);
@@ -2408,19 +2407,11 @@ void LIRGenerator::do_LoadIndexed(LoadIndexed* x) {
   }
 
   Value element;
-  if (x->vt() != NULL) {
+  if (x->subelt_field() != NULL) {
+    // handles cases where a non value type sub-element is accessed
     assert(x->array()->is_loaded_flattened_array(), "must be");
-    // Find the destination address (of the NewInlineTypeInstance).
-    LIRItem obj_item(x->vt(), this);
-
-    access_flattened_array(true, array, index, obj_item,
-                           x->delayed() == NULL ? 0 : x->delayed()->field(),
-                           x->delayed() == NULL ? 0 : x->delayed()->offset());
-    set_no_result(x);
-  } else if (x->delayed() != NULL) {
-    assert(x->array()->is_loaded_flattened_array(), "must be");
-    LIR_Opr result = rlock_result(x, x->delayed()->field()->type()->basic_type());
-    access_sub_element(array, index, result, x->delayed()->field(), x->delayed()->offset());
+    LIR_Opr result = rlock_result(x, x->subelt_field()->type()->basic_type());
+    access_sub_element(array, index, result, x->subelt_field(), x->subelt_offset());
   } else if (x->array() != NULL && x->array()->is_loaded_flattened_array() &&
              x->array()->declared_type()->as_flat_array_klass()->element_klass()->as_inline_klass()->is_empty()) {
     // Load the default instance instead of reading the element
@@ -2441,7 +2432,7 @@ void LIRGenerator::do_LoadIndexed(LoadIndexed* x) {
     }
 
     if (x->elt_type() == T_OBJECT && x->array()->maybe_flattened_array()) {
-      assert(x->delayed() == NULL, "Delayed LoadIndexed only apply to loaded_flattened_arrays");
+      assert(x->subelt_field() == NULL, "Delayed LoadIndexed only apply to loaded_flattened_arrays");
       index.load_item();
       // if we are loading from flattened array, load it using a runtime call
       slow_path = new LoadFlattenedArrayStub(array.result(), index.result(), result, state_for(x, x->state_before()));
@@ -2461,6 +2452,92 @@ void LIRGenerator::do_LoadIndexed(LoadIndexed* x) {
 
     element = x;
   }
+
+  if (x->should_profile()) {
+    profile_element_type(element, md, load_store);
+  }
+}
+
+void LIRGenerator::do_LoadFlatIndexed(LoadFlatIndexed* x) {
+  bool use_length = x->length() != NULL;
+  LIRItem array(x->array(), this);
+  LIRItem index(x->index(), this);
+  LIRItem length(this);
+  bool needs_range_check = x->compute_needs_range_check();
+
+  if (use_length && needs_range_check) {
+    length.set_instruction(x->length());
+    length.load_item();
+  }
+
+  array.load_item();
+  if (index.is_constant() && can_inline_as_constant(x->index())) {
+    // let it be a constant
+    index.dont_load_item();
+  } else {
+    index.load_item();
+  }
+
+  CodeEmitInfo* range_check_info = state_for(x);
+  CodeEmitInfo* null_check_info = NULL;
+  if (x->needs_null_check()) {
+    NullCheck* nc = x->explicit_null_check();
+    if (nc != NULL) {
+      null_check_info = state_for(nc);
+    } else {
+      null_check_info = range_check_info;
+    }
+    if (StressLoopInvariantCodeMotion && null_check_info->deoptimize_on_exception()) {
+      LIR_Opr obj = new_register(T_OBJECT);
+      __ move(LIR_OprFact::oopConst(NULL), obj);
+      __ null_check(obj, new CodeEmitInfo(null_check_info));
+    }
+  }
+
+  if (GenerateRangeChecks && needs_range_check) {
+    if (StressLoopInvariantCodeMotion && range_check_info->deoptimize_on_exception()) {
+      __ branch(lir_cond_always, new RangeCheckStub(range_check_info, index.result(), array.result()));
+    } else if (use_length) {
+      // TODO: use a (modified) version of array_range_check that does not require a
+      //       constant length to be loaded to a register
+      __ cmp(lir_cond_belowEqual, length.result(), index.result());
+      __ branch(lir_cond_belowEqual, new RangeCheckStub(range_check_info, index.result(), array.result()));
+    } else {
+      array_range_check(array.result(), index.result(), null_check_info, range_check_info);
+      // The range check performs the null check, so clear it out for the load
+      null_check_info = NULL;
+    }
+  }
+
+  ciMethodData* md = NULL;
+  ciArrayLoadStoreData* load_store = NULL;
+  if (x->should_profile()) {
+    if (x->array()->is_loaded_flattened_array()) {
+      // No need to profile a load from a flattened array of known type. This can happen if
+      // the type only became known after optimizations (for example, after the PhiSimplifier).
+      x->set_should_profile(false);
+    } else {
+      profile_array_type(x, md, load_store);
+    }
+  }
+
+  Value element;
+  assert(x->array()->is_loaded_flattened_array(), "must be");
+  ciInlineKlass* inline_klass = NULL;
+  if (x->subelt_field() != NULL) {
+    inline_klass = x->subelt_field()->type()->as_inline_klass();
+  } else {
+    inline_klass = x->exact_type()->as_inline_klass();
+  }
+  assert(inline_klass->basic_type() == T_INLINE_TYPE, "Must be");
+  LIR_Opr result = rlock_result(x, inline_klass->basic_type());
+  LIR_Opr bufval = new_buffered_value(inline_klass, x->type(), state_for(x, x->state_before()));
+  __ move(bufval, result);
+
+  LIRItem buf_value(x, this);
+
+  tty->print_cr("access_flattened_array: field = %p, offset = %d", x->subelt_field(), x->subelt_offset());
+  access_flattened_array(true, array, index, buf_value, x->subelt_field(), x->subelt_offset());
 
   if (x->should_profile()) {
     profile_element_type(element, md, load_store);

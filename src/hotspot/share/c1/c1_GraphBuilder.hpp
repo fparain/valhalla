@@ -50,6 +50,31 @@ public:
   void inc_offset(int offset)     { _offset += offset; }
 };
 
+class DelayedLoadIndexed : public CompilationResourceObj {
+ private:
+  Value          _array;
+  Value          _index;
+  Value          _length;
+  BasicType      _elt_type;
+  ValueStack*    _state_before;
+  ciField* _field;
+  int _offset;
+
+ public:
+  DelayedLoadIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before, ciInlineKlass* buffer_value_klass)
+   : _array(array), _index(index), _length(length), _elt_type(elt_type), _state_before(state_before), _field(NULL), _offset(0) { }
+
+  Value array() const                            { return _array; }
+  Value index() const                            { return _index; }
+  Value length() const                           { return _length; }
+  BasicType elt_type() const                     { return _elt_type; }
+  ValueStack* state_before() const               { return _state_before; }
+  ciField* field() const                         { return _field; }
+  int offset() const                             { return _offset; }
+
+  void update(ciField* field, int offset);
+};
+
 class GraphBuilder {
  private:
   // Per-scope data. These are pushed and popped as we descend into

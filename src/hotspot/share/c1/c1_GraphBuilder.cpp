@@ -681,6 +681,17 @@ class MemoryBuffer: public CompilationResourceObj {
     }
   }
 
+  // Record this newly allocated object
+  void new_instance(LoadFlatIndexed* object) {
+    int index = _newobjects.length();
+    _newobjects.append(object);
+    if (_fields.at_grow(index, NULL) == NULL) {
+      _fields.at_put(index, new FieldBuffer());
+    } else {
+      _fields.at(index)->kill();
+    }
+  }
+
   void store_value(Value value) {
     int index = _newobjects.find(value);
     if (index != -1) {
@@ -703,6 +714,11 @@ class MemoryBuffer: public CompilationResourceObj {
   }
 };
 
+void DelayedLoadIndexed::update(ciField* field, int offset) {
+  _offset = offset;
+  _field = field;
+  _elt_type = field->type()->basic_type();
+}
 
 // Implementation of GraphBuilder's ScopeData
 
@@ -1036,7 +1052,6 @@ void GraphBuilder::load_indexed(BasicType type) {
     length = append(new ArrayLength(array, state_before));
   }
 
-  bool need_membar = false;
   LoadIndexed* load_indexed = NULL;
   Instruction* result = NULL;
   if (array->is_loaded_flattened_array()) {
@@ -1047,7 +1062,7 @@ void GraphBuilder::load_indexed(BasicType type) {
     ciBytecodeStream s(method());
     s.force_bci(bci());
     s.next();
-    if (s.cur_bc() == Bytecodes::_getfield && elem_klass->is_null_free()) {
+    if (s.cur_bc() == Bytecodes::_getfield) {
       bool will_link;
       ciField* next_field = s.get_field(will_link);
       bool next_needs_patching = !next_field->holder()->is_loaded() ||
@@ -1057,27 +1072,23 @@ void GraphBuilder::load_indexed(BasicType type) {
     }
     if (can_delay_access) {
       // potentially optimizable array access, storing information for delayed decision
-      LoadIndexed* li = new LoadIndexed(array, index, length, type, state_before);
-      DelayedLoadIndexed* dli = new DelayedLoadIndexed(li, state_before);
-      li->set_delayed(dli);
+      DelayedLoadIndexed* dli = new DelayedLoadIndexed(array, index, length, type, state_before, elem_klass);
       set_pending_load_indexed(dli);
       return; // Nothing else to do for now
+    } else if (elem_klass->is_empty()) {
+      // No need to create a new instance, the default instance will be used instead
+      // Pushing a constant with the default instance like it is done in getfield is
+      // not an option here, because index must be checked dynamically (could throw OOBE)
+      load_indexed = new LoadIndexed(array, index, length, type, state_before);
+      apush(append(load_indexed));
     } else {
-      if (elem_klass->is_empty()) {
-        // No need to create a new instance, the default instance will be used instead
-        load_indexed = new LoadIndexed(array, index, length, type, state_before);
-        apush(append(load_indexed));
-      } else {
-        NewInlineTypeInstance* new_instance = new NewInlineTypeInstance(elem_klass, state_before);
-        _memory->new_instance(new_instance);
-        apush(append_split(new_instance));
-        load_indexed = new LoadIndexed(array, index, length, type, state_before);
-        load_indexed->set_vt(new_instance);
-        // The LoadIndexed node will initialise this instance by copying from
-        // the flattened field.  Ensure these stores are visible before any
-        // subsequent store that publishes this reference.
-        need_membar = true;
-      }
+      LoadFlatIndexed* load_flat_indexed = new LoadFlatIndexed(array, index, length, type, state_before);
+      _memory->new_instance(load_flat_indexed);
+      apush(append(load_flat_indexed));
+      // The LoadFlatIndexed node will initialise this instance by copying from
+      // the flattened field.  Ensure these stores are visible before any
+      // subsequent store that publishes this reference.
+      append(new MemBar(lir_membar_storestore));
     }
   } else {
     load_indexed = new LoadIndexed(array, index, length, type, state_before);
@@ -1087,13 +1098,8 @@ void GraphBuilder::load_indexed(BasicType type) {
       load_indexed->set_profiled_method(method());
       load_indexed->set_profiled_bci(bci());
     }
-  }
-  result = append(load_indexed);
-  if (need_membar) {
-    append(new MemBar(lir_membar_storestore));
-  }
-  assert(!load_indexed->should_profile() || load_indexed == result, "should not be optimized out");
-  if (!array->is_loaded_flattened_array()) {
+    result = append(load_indexed);
+    assert(!load_indexed->should_profile() || load_indexed == result, "should not be optimized out");
     push(as_ValueType(type), result);
   }
 }
@@ -1938,9 +1944,10 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
             set_pending_field_access(NULL);
           } else if (has_pending_load_indexed()) {
             assert(!needs_patching, "Can't patch delayed field access");
-            pending_load_indexed()->update(field, offset - field->holder()->as_inline_klass()->first_field_offset());
-            LoadIndexed* li = pending_load_indexed()->load_instr();
-            li->set_type(type);
+            DelayedLoadIndexed* dli = pending_load_indexed();
+            LoadIndexed* li = new LoadIndexed(dli->array(), dli->index(), dli->length(), dli->elt_type(), dli->state_before());
+            int suboffset = dli->offset() + offset - field->holder()->as_inline_klass()->first_field_offset();
+            li->select_subelement(field, suboffset);
             push(type, append(li));
             set_pending_load_indexed(NULL);
             break;
@@ -2009,12 +2016,11 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
               }
             } else if (has_pending_load_indexed()) {
               assert(!needs_patching, "Can't patch delayed field access");
-              pending_load_indexed()->update(field, offset - field->holder()->as_inline_klass()->first_field_offset());
-              NewInlineTypeInstance* vt = new NewInlineTypeInstance(inline_klass, pending_load_indexed()->state_before());
-              _memory->new_instance(vt);
-              pending_load_indexed()->load_instr()->set_vt(vt);
-              apush(append_split(vt));
-              append(pending_load_indexed()->load_instr());
+              DelayedLoadIndexed* dli = pending_load_indexed();
+              LoadFlatIndexed* lfi = new LoadFlatIndexed(dli->array(), dli->index(), dli->length(), dli->elt_type(), dli->state_before());
+              lfi->select_subelement(field, offset - field->holder()->as_inline_klass()->first_field_offset());
+              _memory->new_instance(lfi);
+              apush(append(lfi));
               set_pending_load_indexed(NULL);
               need_membar = true;
             } else if (has_pending_field_access()) {

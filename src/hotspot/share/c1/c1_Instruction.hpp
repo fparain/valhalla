@@ -57,6 +57,7 @@ class   AccessArray;
 class     ArrayLength;
 class     AccessIndexed;
 class       LoadIndexed;
+class       LoadFlatIndexed;
 class       StoreIndexed;
 class   NegateOp;
 class   Op2;
@@ -165,6 +166,7 @@ class InstructionVisitor: public StackObj {
   virtual void do_StoreField     (StoreField*      x) = 0;
   virtual void do_ArrayLength    (ArrayLength*     x) = 0;
   virtual void do_LoadIndexed    (LoadIndexed*     x) = 0;
+  virtual void do_LoadFlatIndexed(LoadFlatIndexed* x) = 0;
   virtual void do_StoreIndexed   (StoreIndexed*    x) = 0;
   virtual void do_NegateOp       (NegateOp*        x) = 0;
   virtual void do_ArithmeticOp   (ArithmeticOp*    x) = 0;
@@ -224,6 +226,7 @@ class InstructionVisitor: public StackObj {
 #define HASH3(x1, x2, x3    )                    ((HASH2(x1, x2        ) << 7) ^ HASH1(x3))
 #define HASH4(x1, x2, x3, x4)                    ((HASH3(x1, x2, x3    ) << 7) ^ HASH1(x4))
 #define HASH5(x1, x2, x3, x4, x5)                ((HASH4(x1, x2, x3, x4) << 7) ^ HASH1(x5))
+#define HASH6(x1, x2, x3, x4, x5, x6)            ((HASH5(x1, x2, x3, x4, x5) << 7) ^ HASH1(x6))
 
 
 // The following macros are used to implement instruction-specific hashing.
@@ -294,6 +297,22 @@ class InstructionVisitor: public StackObj {
     if (f2 != _v->f2) return false;                   \
     if (f3 != _v->f3) return false;                   \
     if (f4 != _v->f4) return false;                   \
+    return true;                                      \
+  }                                                   \
+
+  #define HASHING5(class_name, enabled, f1, f2, f3, f4, f5) \
+  virtual intx hash() const {                         \
+    return (enabled) ? HASH6(name(), f1, f2, f3, f4, f5) : 0; \
+  }                                                   \
+  virtual bool is_equal(Value v) const {              \
+    if (!(enabled)  ) return false;                   \
+    class_name* _v = v->as_##class_name();            \
+    if (_v == NULL  ) return false;                   \
+    if (f1 != _v->f1) return false;                   \
+    if (f2 != _v->f2) return false;                   \
+    if (f3 != _v->f3) return false;                   \
+    if (f4 != _v->f4) return false;                   \
+    if (f5 != _v->f5) return false;                   \
     return true;                                      \
   }                                                   \
 
@@ -554,11 +573,13 @@ class Instruction: public CompilationResourceObj {
   virtual Constant*         as_Constant()        { return NULL; }
   virtual AccessField*      as_AccessField()     { return NULL; }
   virtual LoadField*        as_LoadField()       { return NULL; }
+  virtual LoadFlatField*    as_LoadFlatField()   { return NULL; }
   virtual StoreField*       as_StoreField()      { return NULL; }
   virtual AccessArray*      as_AccessArray()     { return NULL; }
   virtual ArrayLength*      as_ArrayLength()     { return NULL; }
   virtual AccessIndexed*    as_AccessIndexed()   { return NULL; }
   virtual LoadIndexed*      as_LoadIndexed()     { return NULL; }
+  virtual LoadFlatIndexed*  as_LoadFlatIndexed() { return NULL; }
   virtual StoreIndexed*     as_StoreIndexed()    { return NULL; }
   virtual NegateOp*         as_NegateOp()        { return NULL; }
   virtual Op2*              as_Op2()             { return NULL; }
@@ -990,22 +1011,22 @@ BASE(AccessIndexed, AccessArray)
   virtual void input_values_do(ValueVisitor* f)   { AccessArray::input_values_do(f); f->visit(&_index); if (_length != NULL) f->visit(&_length); }
 };
 
-class DelayedLoadIndexed;
-
 LEAF(LoadIndexed, AccessIndexed)
  private:
   NullCheck*  _explicit_null_check;              // For explicit null check elimination
-  NewInlineTypeInstance* _vt;
-  DelayedLoadIndexed* _delayed;
+  ciField*    _subelt_field;                     // optional, used when accessing a sub-element
+  int         _subelt_offset;                    // optional, used when accessing a sub-element
 
  public:
   // creation
   LoadIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before, bool mismatched = false)
   : AccessIndexed(array, index, length, elt_type, state_before, mismatched)
-  , _explicit_null_check(NULL), _vt(NULL), _delayed(NULL) {}
+  , _explicit_null_check(NULL), _subelt_field(NULL), _subelt_offset(-1) {}
 
   // accessors
   NullCheck* explicit_null_check() const         { return _explicit_null_check; }
+  ciField* subelt_field() const                  { return _subelt_field; }
+  int subelt_offset() const                      { return _subelt_offset; }
 
   // setters
   // See LoadField::set_explicit_null_check for documentation
@@ -1014,38 +1035,44 @@ LEAF(LoadIndexed, AccessIndexed)
   ciType* exact_type() const;
   ciType* declared_type() const;
 
-  NewInlineTypeInstance* vt() const { return _vt; }
-  void set_vt(NewInlineTypeInstance* vt) { _vt = vt; }
-
-  DelayedLoadIndexed* delayed() const { return _delayed; }
-  void set_delayed(DelayedLoadIndexed* delayed) { _delayed = delayed; }
-
-  // generic
-  HASHING4(LoadIndexed, delayed() == NULL && !should_profile(), type()->tag(), array()->subst(), index()->subst(), vt())
-};
-
-class DelayedLoadIndexed : public CompilationResourceObj {
-private:
-  LoadIndexed* _load_instr;
-  ValueStack* _state_before;
-  ciField* _field;
-  int _offset;
- public:
-  DelayedLoadIndexed(LoadIndexed* load, ValueStack* state_before)
-  : _load_instr(load)
-  , _state_before(state_before)
-  , _field(NULL)
-  , _offset(0) { }
-
-  void update(ciField* field, int offset) {
-    _field = field;
-    _offset += offset;
+  void select_subelement(ciField* field, int offset) {
+    _subelt_field = field;
+    _subelt_offset = offset;
+    set_type(as_ValueType(field->type()->basic_type()));
   }
 
-  LoadIndexed* load_instr() const { return _load_instr; }
-  ValueStack* state_before() const { return _state_before; }
-  ciField* field() const { return _field; }
-  int offset() const { return _offset; }
+  // generic
+  HASHING5(LoadIndexed, !should_profile(), type()->tag(), array()->subst(), index()->subst(), subelt_field(), subelt_offset())
+};
+
+LEAF(LoadFlatIndexed, AccessIndexed)
+private:
+  NullCheck*  _explicit_null_check;              // For explicit null check elimination
+  ciField*    _subelt_field;                     // optional, used when accessing a sub-element
+  int         _subelt_offset;                    // optional, used when accessing a sub-element
+
+ public:
+  LoadFlatIndexed(Value array, Value index, Value length, BasicType elt_type, ValueStack* state_before)
+  : AccessIndexed(array, index, length, elt_type, state_before, false)
+  , _explicit_null_check(NULL), _subelt_field(NULL), _subelt_offset(0) {}
+
+  // accessors
+  NullCheck* explicit_null_check() const         { return _explicit_null_check; }
+  ciField* subelt_field() const                  { return _subelt_field; }
+  int subelt_offset() const                      { return _subelt_offset; }
+  ciType* exact_type() const;
+  ciType* declared_type() const;
+
+  // setters
+  void set_explicit_null_check(NullCheck* check) { _explicit_null_check = check; }
+  void select_subelement(ciField* field, int offset) {
+    _subelt_field = field;
+    _subelt_offset = offset;
+    set_type(as_ValueType(field->type()->basic_type()));
+  }
+
+  // generic
+  HASHING5(LoadFlatIndexed, !should_profile(), type()->tag(), array()->subst(), index()->subst(), subelt_field(), subelt_offset())
 };
 
 LEAF(StoreIndexed, AccessIndexed)

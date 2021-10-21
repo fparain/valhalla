@@ -226,6 +226,7 @@ bool AccessIndexed::compute_needs_range_check() {
 }
 
 
+
 ciType* Constant::exact_type() const {
   if (type()->is_object() && type()->as_ObjectType()->is_loaded()) {
     return type()->as_ObjectType()->exact_type();
@@ -235,7 +236,7 @@ ciType* Constant::exact_type() const {
 
 ciType* LoadIndexed::exact_type() const {
   ciType* array_type = array()->exact_type();
-  if (delayed() == NULL && array_type != NULL) {
+  if (subelt_field() == NULL && array_type != NULL) {
     assert(array_type->is_array_klass(), "what else?");
     ciArrayKlass* ak = (ciArrayKlass*)array_type;
 
@@ -250,8 +251,37 @@ ciType* LoadIndexed::exact_type() const {
 }
 
 ciType* LoadIndexed::declared_type() const {
-  if (delayed() != NULL) {
-    return delayed()->field()->type();
+  if (subelt_field() != NULL) {
+    return subelt_field()->type();
+  }
+  ciType* array_type = array()->declared_type();
+  if (array_type == NULL || !array_type->is_loaded()) {
+    return NULL;
+  }
+  assert(array_type->is_array_klass(), "what else?");
+  ciArrayKlass* ak = (ciArrayKlass*)array_type;
+  return ak->element_type();
+}
+
+ciType* LoadFlatIndexed::exact_type() const {
+  ciType* array_type = array()->exact_type();
+  if (subelt_field() == NULL && array_type != NULL) {
+    assert(array_type->is_array_klass(), "what else?");
+    ciArrayKlass* ak = (ciArrayKlass*)array_type;
+
+    if (ak->element_type()->is_instance_klass()) {
+      ciInstanceKlass* ik = (ciInstanceKlass*)ak->element_type();
+      if (ik->is_loaded() && ik->is_final()) {
+        return ik;
+      }
+    }
+  }
+  return Instruction::exact_type();
+}
+
+ciType* LoadFlatIndexed::declared_type() const {
+  if (subelt_field() != NULL) {
+    return subelt_field()->type();
   }
   ciType* array_type = array()->declared_type();
   if (array_type == NULL || !array_type->is_loaded()) {

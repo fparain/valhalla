@@ -387,9 +387,9 @@ void InstructionPrinter::do_ArrayLength(ArrayLength* x) {
 
 void InstructionPrinter::do_LoadIndexed(LoadIndexed* x) {
   print_indexed(x);
-  if (x->delayed() != NULL) {
-    output()->print(" +%d", x->delayed()->offset());
-    output()->print(" (%c)", type2char(x->delayed()->field()->type()->basic_type()));
+  if (x->subelt_field() != NULL) {
+    output()->print(" +%d", x->subelt_offset());
+    output()->print(" (%c)", type2char(x->subelt_field()->type()->basic_type()));
   } else {
     output()->print(" (%c)", type2char(x->elt_type()));
   }
@@ -398,6 +398,18 @@ void InstructionPrinter::do_LoadIndexed(LoadIndexed* x) {
   }
 }
 
+void InstructionPrinter::do_LoadFlatIndexed(LoadFlatIndexed* x) {
+  print_indexed(x);
+  if (x->subelt_field() != NULL) {
+    output()->print(" +%d", x->subelt_offset());
+    output()->print(" (%c)", type2char(x->subelt_field()->type()->basic_type()));
+  } else {
+    output()->print(" (%c)", type2char(x->elt_type()));
+  }
+  if (x->check_flag(Instruction::NeedsRangeCheckFlag)) {
+    output()->print(" [rc]");
+  }
+}
 
 void InstructionPrinter::do_StoreIndexed(StoreIndexed* x) {
   print_indexed(x);

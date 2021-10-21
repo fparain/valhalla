@@ -136,6 +136,7 @@ public:
     void do_LoadFlatField  (LoadFlatField*   x) { /* nothing to do */ };
     void do_ArrayLength    (ArrayLength*     x) { /* nothing to do */ };
     void do_LoadIndexed    (LoadIndexed*     x) { /* nothing to do */ };
+    void do_LoadFlatIndexed(LoadFlatIndexed* x) { /* nothing to do */ };
     void do_NegateOp       (NegateOp*        x) { /* nothing to do */ };
     void do_ShiftOp        (ShiftOp*         x) { /* nothing to do */ };
     void do_CompareOp      (CompareOp*       x) { /* nothing to do */ };

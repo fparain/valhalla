@@ -179,10 +179,10 @@ Value ValueMap::find_insert(Value x) {
   }                                                                                      \
 
 #define MUST_KILL_MEMORY(must_kill, entry, value)                                        \
-  bool must_kill = value->as_LoadField() != NULL || value->as_LoadIndexed() != NULL;
+  bool must_kill = value->as_LoadField() != NULL || value->as_LoadIndexed() != NULL || value->as_LoadFlatField() != NULL || value->as_LoadFlatIndexed() != NULL;
 
 #define MUST_KILL_ARRAY(must_kill, entry, value)                                         \
-  bool must_kill = value->as_LoadIndexed() != NULL                                       \
+  bool must_kill = (value->as_LoadIndexed() != NULL || value->as_LoadFlatIndexed() != NULL) \
                    && value->type()->tag() == type->tag();
 
 #define MUST_KILL_FIELD(must_kill, entry, value)                                         \

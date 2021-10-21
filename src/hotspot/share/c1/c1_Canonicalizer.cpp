@@ -307,6 +307,10 @@ void Canonicalizer::do_LoadIndexed    (LoadIndexed*     x) {
   }
 }
 
+void Canonicalizer::do_LoadFlatIndexed(LoadFlatIndexed* x) {
+  // FIXME: look for what should be done here.
+}
+
 void Canonicalizer::do_StoreIndexed   (StoreIndexed*    x) {
   // If a value is going to be stored into a field or array some of
   // the conversions emitted by javac are unneeded because the fields
