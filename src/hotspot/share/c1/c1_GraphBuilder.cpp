@@ -649,40 +649,7 @@ class MemoryBuffer: public CompilationResourceObj {
   }
 
   // Record this newly allocated object
-  void new_instance(NewInstance* object) {
-    int index = _newobjects.length();
-    _newobjects.append(object);
-    if (_fields.at_grow(index, NULL) == NULL) {
-      _fields.at_put(index, new FieldBuffer());
-    } else {
-      _fields.at(index)->kill();
-    }
-  }
-
-  // Record this newly allocated object
-  void new_instance(NewInlineTypeInstance* object) {
-    int index = _newobjects.length();
-    _newobjects.append(object);
-    if (_fields.at_grow(index, NULL) == NULL) {
-      _fields.at_put(index, new FieldBuffer());
-    } else {
-      _fields.at(index)->kill();
-    }
-  }
-
-  // Record this newly allocated object
-  void new_instance(LoadFlatField* object) {
-    int index = _newobjects.length();
-    _newobjects.append(object);
-    if (_fields.at_grow(index, NULL) == NULL) {
-      _fields.at_put(index, new FieldBuffer());
-    } else {
-      _fields.at(index)->kill();
-    }
-  }
-
-  // Record this newly allocated object
-  void new_instance(LoadFlatIndexed* object) {
+  void new_instance(Value object) {
     int index = _newobjects.length();
     _newobjects.append(object);
     if (_fields.at_grow(index, NULL) == NULL) {
@@ -2006,7 +1973,6 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
             ciInlineKlass* inline_klass = field->type()->as_inline_klass();
             scope()->set_wrote_final();
             scope()->set_wrote_fields();
-            bool need_membar = false;
             if (inline_klass->is_empty()) {
               apush(append(new Constant(new InstanceConstant(inline_klass->default_instance()))));
               if (has_pending_field_access()) {
@@ -2014,34 +1980,32 @@ void GraphBuilder::access_field(Bytecodes::Code code) {
               } else if (has_pending_load_indexed()) {
                 set_pending_load_indexed(NULL);
               }
-            } else if (has_pending_load_indexed()) {
-              assert(!needs_patching, "Can't patch delayed field access");
-              DelayedLoadIndexed* dli = pending_load_indexed();
-              LoadFlatIndexed* lfi = new LoadFlatIndexed(dli->array(), dli->index(), dli->length(), dli->elt_type(), dli->state_before());
-              assert(lfi->as_LoadFlatIndexed() != NULL, "Must be");
-              assert(lfi->as_LoadIndexed() == NULL, "Hope would be");
-              lfi->select_subelement(field, offset - field->holder()->as_inline_klass()->first_field_offset());
-              _memory->new_instance(lfi);
-              apush(append(lfi));
-              set_pending_load_indexed(NULL);
-              need_membar = true;
-            } else if (has_pending_field_access()) {
-              LoadFlatField* bv = new LoadFlatField(pending_field_access()->obj(),
-                                                    pending_field_access()->offset() + field->offset() - field->holder()->as_inline_klass()->first_field_offset(),
-                                                    field, false, state_before, needs_patching);
-              _memory->new_instance(bv);
-              apush(append(bv));
-              set_pending_field_access(NULL);
-              need_membar = true;
             } else {
-              assert(!needs_patching, "Can't patch flattened inline type field access");
-              LoadFlatField* bv = new LoadFlatField(obj, field->offset(), field, false, state_before, needs_patching);
-              _memory->new_instance(bv);
-              apush(append(bv));
-              need_membar = true;
-            }
-            if (need_membar) {
-              // If we allocated a new instance ensure the stores to copy the
+              assert(!needs_patching, "Can't patch flattened inline type");
+              bool clear_delayed_instruction = false;
+              Instruction* load;
+              if (has_pending_load_indexed()) {
+                DelayedLoadIndexed* dli = pending_load_indexed();
+                LoadFlatIndexed* lfi = new LoadFlatIndexed(dli->array(), dli->index(), dli->length(), dli->elt_type(), dli->state_before());
+                lfi->select_subelement(field, offset - field->holder()->as_inline_klass()->first_field_offset());
+                load = lfi;
+                clear_delayed_instruction = true;
+              } else if (has_pending_field_access()) {
+                load = new LoadFlatField(pending_field_access()->obj(),
+                                         pending_field_access()->offset() + field->offset() - field->holder()->as_inline_klass()->first_field_offset(),
+                                         field, false, state_before, needs_patching);
+                clear_delayed_instruction = true;
+              } else {
+                load = new LoadFlatField(obj, field->offset(), field, false, state_before, needs_patching);
+              }
+              _memory->new_instance(load);
+              apush(append(load));
+              if (clear_delayed_instruction) {
+                // pending markers must be cleared after the instruction has been pushed, because of the bci mismatch
+                set_pending_field_access(NULL);
+                set_pending_load_indexed(NULL);
+              }
+              // A new instance has been allocated, ensure the stores to copy the
               // field contents are visible before any subsequent store that
               // publishes this reference.
               append(new MemBar(lir_membar_storestore));
