@@ -56,6 +56,22 @@
 #define PATCHED_ADDR  (max_jint)
 #endif
 
+static BasicType register_type_for(BasicType t) {
+  // Types which are smaller than int are passed as int, so
+  // correct the type which passed.
+  switch (t) {
+    case T_BYTE:
+    case T_BOOLEAN:
+    case T_SHORT:
+    case T_CHAR:
+      t = T_INT;
+      break;
+    default:
+      break;
+  }
+  return t;
+}
+
 void PhiResolverState::reset() {
   _virtual_operands.clear();
   _other_operands.clear();
@@ -1756,7 +1772,7 @@ void LIRGenerator::access_sub_element(LIRItem& array, LIRItem& index, LIR_Opr& r
 }
 
 void LIRGenerator::access_flattened_array(bool is_load, LIRItem& array, LIRItem& index, LIRItem& obj_item,
-                                          ciField* field, int sub_offset) {
+                                          Instruction* x, ciField* field, int sub_offset) {
   assert(sub_offset == 0 || field != NULL, "Sanity check");
 
   // Find the starting address of the source (inside the array)
@@ -1773,40 +1789,17 @@ void LIRGenerator::access_flattened_array(bool is_load, LIRItem& array, LIRItem&
     assert(!inner_field->is_flattened(), "flattened fields must have been expanded");
     int obj_offset = inner_field->offset();
     int elm_offset = obj_offset - elem_klass->first_field_offset() + sub_offset; // object header is not stored in array.
+
     BasicType field_type = inner_field->type()->basic_type();
-
-    // Types which are smaller than int are still passed in an int register.
-    BasicType reg_type = field_type;
-    switch (reg_type) {
-    case T_BYTE:
-    case T_BOOLEAN:
-    case T_SHORT:
-    case T_CHAR:
-      reg_type = T_INT;
-      break;
-    default:
-      break;
-    }
-
+    BasicType reg_type = register_type_for(field_type);
     LIR_Opr temp = new_register(reg_type);
     TempResolvedAddress* elm_resolved_addr = new TempResolvedAddress(as_ValueType(field_type), elm_op);
     LIRItem elm_item(elm_resolved_addr, this);
 
-    DecoratorSet decorators = IN_HEAP;
     if (is_load) {
-      access_load_at(decorators, field_type,
-                     elm_item, LIR_OprFact::intConst(elm_offset), temp,
-                     NULL, NULL);
-      access_store_at(decorators, field_type,
-                      obj_item, LIR_OprFact::intConst(obj_offset), temp,
-                      NULL, NULL);
+      copy_basic_field_helper(inner_field, elm_item, elm_offset, obj_item, obj_offset, x);
     } else {
-      access_load_at(decorators, field_type,
-                     obj_item, LIR_OprFact::intConst(obj_offset), temp,
-                     NULL, NULL);
-      access_store_at(decorators, field_type,
-                      elm_item, LIR_OprFact::intConst(elm_offset), temp,
-                      NULL, NULL);
+      copy_basic_field_helper(inner_field, obj_item, obj_offset, elm_item, elm_offset, x);
     }
   }
 }
@@ -1926,7 +1919,7 @@ void LIRGenerator::do_StoreIndexed(StoreIndexed* x) {
     }
     // If array element is an empty inline type, no need to copy anything
     if (!x->array()->declared_type()->as_flat_array_klass()->element_klass()->as_inline_klass()->is_empty()) {
-      access_flattened_array(false, array, index, value);
+      access_flattened_array(false, array, index, value, x);
     }
   } else {
     StoreFlattenedArrayStub* slow_path = NULL;
@@ -2152,32 +2145,26 @@ void LIRGenerator::do_LoadField(LoadField* x) {
   }
 }
 
+void LIRGenerator::copy_basic_field_helper(ciField* field, LIRItem src, int src_offset, LIRItem dst, int dst_offset, Instruction* x) {
+  assert(!field->is_flattened(), "Flattened fields are not basic fields");
+  BasicType field_type = register_type_for(field->type()->basic_type());
+  DecoratorSet decorators = IN_HEAP;
+  LIR_Opr reg = new_register(field_type);
+  if (field->is_volatile()) {
+    decorators |= MO_SEQ_CST;
+  }
+  CodeEmitInfo* info = state_for(x, x->state_before());
+  access_load_at(decorators, field_type,
+                src, LIR_OprFact::intConst(src_offset), reg,
+                  NULL, info ? new CodeEmitInfo(info) : NULL);
+  info = state_for(x, x->state_before());
+  access_store_at(decorators, field_type, dst, LIR_OprFact::intConst(dst_offset),
+                  reg, NULL, info ? new CodeEmitInfo(info) : NULL);
+}
+
 void LIRGenerator::copy_field_content(ciField* field, LIRItem src, int src_offset, LIRItem dst, int dst_offset, Instruction* x) {
   if (!field->is_flattened()) {
-    BasicType t = field->type()->basic_type();
-    switch (t) {
-      case T_BYTE:
-      case T_BOOLEAN:
-      case T_SHORT:
-      case T_CHAR:
-        t = T_INT;
-        break;
-      default:
-        break;
-    }
-    LIR_Opr reg = new_register(t);
-    DecoratorSet decorators = IN_HEAP;
-    if (field->is_volatile()) {
-      decorators |= MO_SEQ_CST;
-    }
-    BasicType field_type = field->type()->basic_type();
-    CodeEmitInfo* info = state_for(x, x->state_before());
-    access_load_at(decorators, field_type,
-                    src, LIR_OprFact::intConst(src_offset), reg,
-                    NULL, info);
-    decorators = IN_HEAP;
-    access_store_at(decorators, field_type, dst, LIR_OprFact::intConst(dst_offset),
-                        reg, NULL, info);
+    copy_basic_field_helper(field, src, src_offset, dst, dst_offset, x);
   } else {
     ciInlineKlass* inline_klass = field->type()->as_inline_klass();
     for (int i = 0; i < inline_klass->nof_nonstatic_fields(); i++) {
@@ -2189,29 +2176,7 @@ void LIRGenerator::copy_field_content(ciField* field, LIRItem src, int src_offse
         // call copy_field_content recursively
         copy_field_content(inner_field, src, offset1, dst, offset2, x);
       } else {
-        BasicType field_type = inner_field->type()->basic_type();
-        BasicType t = field_type;
-        switch (t) {
-          case T_BYTE:
-          case T_BOOLEAN:
-          case T_SHORT:
-          case T_CHAR:
-            t = T_INT;
-            break;
-          default:
-            break;
-        }
-        LIR_Opr reg = new_register(t);
-        if (inner_field->is_volatile()) {                 // Decorators are not enough for volatile flat field
-          decorators |= MO_SEQ_CST;
-        }
-        CodeEmitInfo* info = state_for(x, x->state_before());
-        access_load_at(decorators, field_type,
-                      src, LIR_OprFact::intConst(offset1), reg,
-                       NULL, info ? new CodeEmitInfo(info) : NULL);
-        info = state_for(x, x->state_before());
-        access_store_at(decorators, field_type, dst, LIR_OprFact::intConst(offset2),
-                        reg, NULL, info ? new CodeEmitInfo(info) : NULL);
+        copy_basic_field_helper(inner_field, src, offset1, dst, offset2, x);
       }
     }
   }
@@ -2523,7 +2488,7 @@ void LIRGenerator::do_LoadFlatIndexed(LoadFlatIndexed* x) {
 
   LIRItem buf_value(x, this);
 
-  access_flattened_array(true, array, index, buf_value, x->subelt_field(), x->subelt_offset());
+  access_flattened_array(true, array, index, buf_value, x, x->subelt_field(), x->subelt_offset());
 }
 
 void LIRGenerator::do_Deoptimize(Deoptimize* x) {
@@ -3176,20 +3141,7 @@ void LIRGenerator::do_Base(Base* x) {
   for (int i = 0; i < args->length(); i++) {
     LIR_Opr src = args->at(i);
     assert(!src->is_illegal(), "check");
-    BasicType t = src->type();
-
-    // Types which are smaller than int are passed as int, so
-    // correct the type which passed.
-    switch (t) {
-    case T_BYTE:
-    case T_BOOLEAN:
-    case T_SHORT:
-    case T_CHAR:
-      t = T_INT;
-      break;
-    default:
-      break;
-    }
+    BasicType t = register_type_for(src->type());
 
     LIR_Opr dest = new_register(t);
     __ move(src, dest);
