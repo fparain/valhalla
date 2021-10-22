@@ -658,8 +658,7 @@ class NullCheckEliminator: public ValueVisitor {
   // and the last pass is the only one whose result is valid.
   void handle_AccessField     (AccessField* x);
   void handle_ArrayLength     (ArrayLength* x);
-  void handle_LoadIndexed     (LoadIndexed* x);
-  void handle_LoadFlatIndexed(LoadFlatIndexed* x);
+  void handle_ReadAccessIndexed(ReadAccessIndexed* x);
   void handle_StoreIndexed    (StoreIndexed* x);
   void handle_NullCheck       (NullCheck* x);
   void handle_Invoke          (Invoke* x);
@@ -692,8 +691,8 @@ void NullCheckVisitor::do_LoadField      (LoadField*       x) { nce()->handle_Ac
 void NullCheckVisitor::do_LoadFlatField  (LoadFlatField*   x) { nce()->handle_AccessField(x); }
 void NullCheckVisitor::do_StoreField     (StoreField*      x) { nce()->handle_AccessField(x); }
 void NullCheckVisitor::do_ArrayLength    (ArrayLength*     x) { nce()->handle_ArrayLength(x); }
-void NullCheckVisitor::do_LoadIndexed    (LoadIndexed*     x) { nce()->handle_LoadIndexed(x); }
-void NullCheckVisitor::do_LoadFlatIndexed(LoadFlatIndexed* x) { nce()->handle_LoadFlatIndexed(x); }
+void NullCheckVisitor::do_LoadIndexed    (LoadIndexed*     x) { nce()->handle_ReadAccessIndexed(x); }
+void NullCheckVisitor::do_LoadFlatIndexed(LoadFlatIndexed* x) { nce()->handle_ReadAccessIndexed(x); }
 void NullCheckVisitor::do_StoreIndexed   (StoreIndexed*    x) { nce()->handle_StoreIndexed(x); }
 void NullCheckVisitor::do_NegateOp       (NegateOp*        x) {}
 void NullCheckVisitor::do_ArithmeticOp   (ArithmeticOp*    x) { if (x->can_trap()) nce()->clear_last_explicit_null_check(); }
@@ -957,8 +956,7 @@ void NullCheckEliminator::handle_ArrayLength(ArrayLength* x) {
   clear_last_explicit_null_check();
 }
 
-
-void NullCheckEliminator::handle_LoadIndexed(LoadIndexed* x) {
+void NullCheckEliminator::handle_ReadAccessIndexed(ReadAccessIndexed* x) {
   Value array = x->array();
   if (set_contains(array)) {
     // Value is non-null => update AccessArray
@@ -966,50 +964,20 @@ void NullCheckEliminator::handle_LoadIndexed(LoadIndexed* x) {
       x->set_explicit_null_check(consume_last_explicit_null_check());
       x->set_needs_null_check(true);
       if (PrintNullCheckElimination) {
-        tty->print_cr("Folded NullCheck %d into LoadIndexed %d's null check for value %d",
-                      x->explicit_null_check()->id(), x->id(), array->id());
+        tty->print_cr("Folded NullCheck %d into %s %d's null check for value %d",
+                      x->explicit_null_check()->id(), x->name(), x->id(), array->id());
       }
     } else {
       x->set_explicit_null_check(NULL);
       x->set_needs_null_check(false);
       if (PrintNullCheckElimination) {
-        tty->print_cr("Eliminated LoadIndexed %d's null check for value %d", x->id(), array->id());
+        tty->print_cr("Eliminated %s %d's null check for value %d", x->name(), x->id(), array->id());
       }
     }
   } else {
     set_put(array);
     if (PrintNullCheckElimination) {
-      tty->print_cr("LoadIndexed %d of value %d proves value to be non-null", x->id(), array->id());
-    }
-    // Ensure previous passes do not cause wrong state
-    x->set_needs_null_check(true);
-    x->set_explicit_null_check(NULL);
-  }
-  clear_last_explicit_null_check();
-}
-
-void NullCheckEliminator::handle_LoadFlatIndexed(LoadFlatIndexed* x) {
-  Value array = x->array();
-  if (set_contains(array)) {
-    // Value is non-null => update AccessArray
-    if (last_explicit_null_check_obj() == array) {
-      x->set_explicit_null_check(consume_last_explicit_null_check());
-      x->set_needs_null_check(true);
-      if (PrintNullCheckElimination) {
-        tty->print_cr("Folded NullCheck %d into LoadIndexed %d's null check for value %d",
-                      x->explicit_null_check()->id(), x->id(), array->id());
-      }
-    } else {
-      x->set_explicit_null_check(NULL);
-      x->set_needs_null_check(false);
-      if (PrintNullCheckElimination) {
-        tty->print_cr("Eliminated LoadIndexed %d's null check for value %d", x->id(), array->id());
-      }
-    }
-  } else {
-    set_put(array);
-    if (PrintNullCheckElimination) {
-      tty->print_cr("LoadIndexed %d of value %d proves value to be non-null", x->id(), array->id());
+      tty->print_cr("%s %d of value %d proves value to be non-null", x->name(), x->id(), array->id());
     }
     // Ensure previous passes do not cause wrong state
     x->set_needs_null_check(true);
