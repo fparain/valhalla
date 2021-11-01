@@ -3683,6 +3683,7 @@ public class TestLWorld {
     }
 
     @Test
+    @IR(failOn = {ALLOC, LOAD, STORE})
     public void test130() {
         Object obj = test130_inlinee();
         synchronized (obj) {
@@ -3727,6 +3728,7 @@ public class TestLWorld {
 
     // Test locking on object that is known to be an inline type only after CCP
     @Test
+    @IR(failOn = {ALLOC, LOAD, STORE})
     public void test132() {
         MyValue2 vt = MyValue2.createWithFieldsInline(rI, rD);
         Object obj = Integer.valueOf(42);
@@ -4120,8 +4122,6 @@ public class TestLWorld {
     }
 
     // Same as test150 but with val not being allocated in the scope of the method
-// TODO 8274972
-/*
     @Test
     @IR(failOn = {compiler.lib.ir_framework.IRNode.DYNAMIC_CALL_OF_METHOD, "MyValue2::hash"},
         counts = {compiler.lib.ir_framework.IRNode.STATIC_CALL_OF_METHOD, "MyValue2::hash", "= 1"})
@@ -4143,5 +4143,4 @@ public class TestLWorld {
     public void test151_verifier() {
         Asserts.assertEquals(test151(testValue2), testValue2.hash());
     }
-*/
 }

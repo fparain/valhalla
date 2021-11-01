@@ -1913,12 +1913,12 @@ bool PhiNode::wait_for_region_igvn(PhaseGVN* phase) {
 }
 
 // Push inline type input nodes (and null) down through the phi recursively (can handle data loops).
-InlineTypeBaseNode* PhiNode::push_inline_types_through(PhaseGVN* phase, bool can_reshape, ciInlineKlass* vk) {
+InlineTypeBaseNode* PhiNode::push_inline_types_through(PhaseGVN* phase, bool can_reshape, ciInlineKlass* vk, bool is_init) {
   InlineTypeBaseNode* vt = NULL;
   if (_type->isa_ptr()) {
-    vt = InlineTypePtrNode::make_null(*phase, vk)->clone_with_phis(phase, in(0));
+    vt = InlineTypePtrNode::make_null(*phase, vk)->clone_with_phis(phase, in(0), is_init);
   } else {
-    vt = InlineTypeNode::make_null(*phase, vk)->clone_with_phis(phase, in(0));
+    vt = InlineTypeNode::make_null(*phase, vk)->clone_with_phis(phase, in(0), is_init);
   }
   if (can_reshape) {
     // Replace phi right away to be able to use the inline
@@ -1932,19 +1932,30 @@ InlineTypeBaseNode* PhiNode::push_inline_types_through(PhaseGVN* phase, bool can
     }
     assert(outcnt() == 0, "should be dead now");
   }
+  ResourceMark rm;
+  Node_List casts;
   for (uint i = 1; i < req(); ++i) {
-    Node* n = in(i)->uncast();
-    Node* other = NULL;
-    if (n->is_InlineTypeBase()) {
-      other = n;
-    } else if (phase->type(n)->is_zero_type()) {
-      other = InlineTypePtrNode::make_null(*phase, vk);
-    } else {
+    Node* n = in(i);
+    while (n->is_ConstraintCast()) {
+      casts.push(n);
+      n = n->in(1);
+    }
+    if (phase->type(n)->is_zero_type()) {
+      n = InlineTypePtrNode::make_null(*phase, vk);
+    } else if (n->is_Phi()) {
       assert(can_reshape, "can only handle phis during IGVN");
-      other = phase->transform(n->as_Phi()->push_inline_types_through(phase, can_reshape, vk));
+      n = phase->transform(n->as_Phi()->push_inline_types_through(phase, can_reshape, vk, is_init));
+    }
+    while (casts.size() != 0) {
+      // Update the cast input and let ConstraintCastNode::Ideal push it through the InlineTypePtrNode
+      Node* cast = casts.pop();
+      phase->hash_delete(cast);
+      cast->set_req(1, n);
+      n = phase->transform(cast);
+      assert(n->is_InlineTypePtr(), "Failed to push cast through InlineTypePtr");
     }
     bool transform = !can_reshape && (i == (req()-1)); // Transform phis on last merge
-    vt->merge_with(phase, other->as_InlineTypeBase(), i, transform);
+    vt->merge_with(phase, n->as_InlineTypeBase(), i, transform);
   }
   return vt;
 }
@@ -2503,12 +2514,15 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
   // Check recursively if inputs are either an inline type, constant null
   // or another Phi (including self references through data loops). If so,
   // push the inline types down through the phis to enable folding of loads.
-  if (EnableValhalla && req() > 2 && progress == NULL) {
+  if (EnableValhalla && (_type->isa_ptr() || _type->isa_inlinetype()) && req() > 2 && progress == NULL) {
     ResourceMark rm;
     Unique_Node_List worklist;
     worklist.push(this);
     bool can_optimize = true;
     ciInlineKlass* vk = NULL;
+    // true if all IsInit inputs of all InlineType* nodes are true
+    bool is_init = true;
+    Node_List casts;
 
     for (uint next = 0; next < worklist.size() && can_optimize; next++) {
       Node* phi = worklist.at(next);
@@ -2518,20 +2532,38 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
           can_optimize = false;
           break;
         }
-        n = n->uncast();
+        while (n->is_ConstraintCast()) {
+          casts.push(n);
+          n = n->in(1);
+        }
         const Type* t = phase->type(n);
         if (n->is_InlineTypeBase() && n->as_InlineTypeBase()->can_merge() &&
             (vk == NULL || vk == t->inline_klass())) {
           vk = (vk == NULL) ? t->inline_klass() : vk;
-        } else if (n->is_Phi() && can_reshape) {
+          if (phase->find_int_con(n->as_InlineTypeBase()->get_is_init(), 0) != 1) {
+            is_init = false;
+          }
+        } else if (n->is_Phi() && can_reshape && (n->bottom_type()->isa_ptr() || n->bottom_type()->isa_inlinetype())) {
           worklist.push(n);
-        } else if (!t->is_zero_type()) {
+        } else if (t->is_zero_type()) {
+          is_init = false;
+        } else {
           can_optimize = false;
         }
       }
     }
+    // Check if cast nodes can be pushed through
+    const Type* t = Type::get_const_type(vk);
+    while (casts.size() != 0 && can_optimize && t != NULL) {
+      Node* cast = casts.pop();
+      if (t->filter(cast->bottom_type()) == Type::TOP) {
+        can_optimize = false;
+      }
+    }
     if (can_optimize && vk != NULL) {
-      progress = push_inline_types_through(phase, can_reshape, vk);
+// TODO 8275400
+//      assert(!_type->isa_ptr() || _type->maybe_null() || is_init, "Phi not null but a possible null was seen");
+      progress = push_inline_types_through(phase, can_reshape, vk, is_init);
     }
   }
 
